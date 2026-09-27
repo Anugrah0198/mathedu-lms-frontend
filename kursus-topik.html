@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kursus & Topik</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .bab-card{border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:12px;overflow:hidden}
+  .bab-head{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface);cursor:pointer}
+  .bab-head .handle{color:var(--text-soft)}
+  .bab-body{padding:0 16px 16px;background:var(--surface-low);display:none}
+  .bab-body.open{display:block}
+  .topik-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+    padding:10px 12px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .aktivitas-row{display:flex;justify-content:space-between;align-items:center;gap:8px;
+    padding:8px 10px;border-radius:var(--r-sm);font-size:12.5px}
+  .aktivitas-row:hover{background:var(--surface-low)}
+  .modal-bg{position:fixed;inset:0;background:rgba(11,29,44,.5);display:none;align-items:center;justify-content:center;z-index:40}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--surface);border-radius:var(--r-lg);padding:22px;width:100%;max-width:420px;box-shadow:var(--shadow-3)}
+</style>
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["guru"]);</script>
+
+<div id="root"></div>
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <h3 class="text-headline-sm" id="modal-title" style="margin-bottom:14px">Tambah Bab Baru</h3>
+    <form id="modal-form">
+      <div class="form-field"><label id="modal-label-1">Judul Bab</label><input id="modal-input-1" required></div>
+      <div class="form-field" id="modal-field-2" style="display:none"><label>Deskripsi singkat</label><textarea id="modal-input-2" rows="2"></textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" id="modal-cancel">Batal</button>
+        <button type="submit" class="btn primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const root = lmsRenderShell({ activeId: "kursus-topik", title: "Kursus & Topik" });
+
+let courseState = { babList: [] };
+let currentCourseId = null;
+
+root.innerHTML = `
+  <div class="breadcrumb">Kurikulum &nbsp;›&nbsp; <b>Manajemen Kursus</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg" id="course-title">Manajemen Kursus</h1>
+      <p id="course-sub">Susun Bab → Topik → Aktivitas untuk kelas Anda.</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn" id="btn-add-topik">+ Tambah Topik</button>
+      <button class="btn primary" id="btn-add-bab">+ Tambah Bab Baru</button>
+    </div>
+  </div>
+
+  <div class="grid grid-4" style="margin-bottom:16px" id="course-stats"></div>
+
+  <div id="bab-list"></div>
+`;
+
+function renderStats(s) {
+  document.getElementById("course-stats").innerHTML = `
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.totalBab}</div><div class="label">Bab · ${s.totalTopik} topik aktif</div></div><div class="ic mint">📚</div></div></div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.rerataKetuntasan}%</div><div class="label">Rerata Ketuntasan</div></div><div class="ic mint">📈</div></div></div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.totalAktivitas}</div><div class="label">Kuis &amp; Evaluasi</div></div><div class="ic mint">📝</div></div></div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.totalSiswa}</div><div class="label">Siswa Terdaftar</div></div><div class="ic mint">🎓</div></div></div>
+  `;
+}
+
+const jenisIcon = { video: "▶", simulasi: "🧪", latihan: "✏️", kuis: "⏱", tugas: "📄" };
+
+function renderBabList() {
+  const el = document.getElementById("bab-list");
+  if (!courseState.babList.length) {
+    el.innerHTML = `<div class="empty">Belum ada bab. Klik "+ Tambah Bab Baru" untuk mulai menyusun kursus.</div>`;
+    return;
+  }
+  el.innerHTML = courseState.babList.map((bab, bi) => `
+    <div class="bab-card">
+      <div class="bab-head" data-toggle="${bab.id}">
+        <span class="handle">☰</span>
+        <div style="flex:1">
+          <span class="chip ${bab.status === 'aktif' ? 'active' : bab.status === 'draft' ? 'locked' : ''}">${bab.status.toUpperCase()}</span>
+          <div class="text-label-lg" style="margin-top:4px">Bab ${bi + 1} · ${bab.judul}</div>
+          <div class="text-body-sm text-muted">${bab.topikList.length} sub-topik · ${bab.topikList.reduce((a,t)=>a+t.aktivitas.length,0)} aktivitas</div>
+        </div>
+        <button class="btn sm" data-add-topik="${bab.id}">+ Topik</button>
+      </div>
+      <div class="bab-body" id="babbody-${bab.id}">
+        ${bab.topikList.map((tp, ti) => `
+          <div class="topik-row" style="display:block">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="text-label-lg">${bi+1}.${ti+1} ${tp.judul}</div>
+              <button class="btn sm" data-add-aktivitas="${bab.id}|${tp.id}">+ Aktivitas</button>
+            </div>
+            <div style="margin-top:6px">
+              ${tp.aktivitas.map(a => `
+                <div class="aktivitas-row">
+                  <span>${jenisIcon[a.jenis] || "•"} ${a.judul}</span>
+                  <span class="chip ${a.wajib ? 'active' : ''}">${a.wajib ? 'Wajib' : a.jenis}</span>
+                </div>
+              `).join("") || `<div class="text-body-sm text-muted">Belum ada aktivitas.</div>`}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `).join("");
+
+  el.querySelectorAll("[data-toggle]").forEach(h => h.addEventListener("click", (e) => {
+    if (e.target.closest("button")) return;
+    document.getElementById("babbody-" + h.dataset.toggle).classList.toggle("open");
+  }));
+  el.querySelectorAll("[data-add-topik]").forEach(b => b.addEventListener("click", () => openTopikModal(b.dataset.addTopik)));
+  el.querySelectorAll("[data-add-aktivitas]").forEach(b => b.addEventListener("click", () => {
+    const [babId, topikId] = b.dataset.addAktivitas.split("|");
+    openAktivitasModal(babId, topikId);
+  }));
+}
+
+// ---- Modal helpers ----
+const modalBg = document.getElementById("modal-bg");
+const modalForm = document.getElementById("modal-form");
+let modalOnSubmit = null;
+
+function openModal(title, label1, showField2) {
+  document.getElementById("modal-title").textContent = title;
+  document.getElementById("modal-label-1").textContent = label1;
+  document.getElementById("modal-input-1").value = "";
+  document.getElementById("modal-input-2").value = "";
+  document.getElementById("modal-field-2").style.display = showField2 ? "flex" : "none";
+  modalBg.classList.add("open");
+}
+document.getElementById("modal-cancel").addEventListener("click", () => modalBg.classList.remove("open"));
+
+document.getElementById("btn-add-bab").addEventListener("click", () => {
+  openModal("Tambah Bab Baru", "Judul Bab", true);
+  modalOnSubmit = async () => {
+    await LMS_API.call("addBab", { courseId: currentCourseId, judul: document.getElementById("modal-input-1").value, deskripsi: document.getElementById("modal-input-2").value });
+    await loadCourse();
+  };
+});
+document.getElementById("btn-add-topik").addEventListener("click", () => {
+  if (!courseState.babList.length) return lmsToast("Buat Bab terlebih dahulu.", true);
+  openTopikModal(courseState.babList[0].id);
+});
+function openTopikModal(babId) {
+  openModal("Tambah Topik", "Judul Topik", false);
+  modalOnSubmit = async () => {
+    await LMS_API.call("addTopik", { babId, judul: document.getElementById("modal-input-1").value });
+    await loadCourse();
+  };
+}
+function openAktivitasModal(babId, topikId) {
+  openModal("Tambah Aktivitas", "Judul Aktivitas (mis. Kuis: Teorema Pythagoras)", false);
+  modalOnSubmit = async () => {
+    await LMS_API.call("addAktivitas", { topikId, judul: document.getElementById("modal-input-1").value, jenis: "latihan", wajib: true });
+    await loadCourse();
+  };
+}
+modalForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    if (modalOnSubmit) await modalOnSubmit();
+    modalBg.classList.remove("open");
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+async function loadCourse() {
+  try {
+    const data = await LMS_API.call("getCourseDetail", { courseId: currentCourseId });
+    currentCourseId = data.course.id;
+    document.getElementById("course-title").textContent = "Manajemen Kursus: " + data.course.nama;
+    document.getElementById("course-sub").textContent = data.course.deskripsi || "Susun Bab → Topik → Aktivitas untuk kelas Anda.";
+    renderStats(data.stats);
+    courseState.babList = data.babList;
+    renderBabList();
+  } catch (err) {
+    lmsToast(err.message, true);
+    renderStats({ totalBab: 0, totalTopik: 0, rerataKetuntasan: 0, totalAktivitas: 0, totalSiswa: 0 });
+    renderBabList();
+  }
+}
+loadCourse();
+</script>
+</body>
+</html>

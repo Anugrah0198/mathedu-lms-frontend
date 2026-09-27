@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Masuk — MathEdu LMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:
+    radial-gradient(circle at 20% 20%, rgba(43,184,150,.10), transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(30,58,76,.08), transparent 45%), var(--canvas);}
+  .login-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--r-xl);box-shadow:var(--shadow-3);padding:32px}
+  .login-brand{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:24px}
+  .login-brand .mark{width:48px;height:48px;border-radius:var(--r-lg);background:var(--primary);
+    color:var(--secondary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px}
+  .login-brand h1{font-size:18px}
+  .login-brand p{color:var(--text-soft);font-size:12.5px}
+  .tabs{display:flex;background:var(--surface-low);border-radius:var(--r-full);padding:4px;margin-bottom:18px}
+  .tabs button{flex:1;border:none;background:transparent;padding:8px;border-radius:var(--r-full);
+    font-size:12.5px;font-weight:600;color:var(--text-soft);cursor:pointer}
+  .tabs button.active{background:var(--primary);color:#fff}
+  .err{color:var(--danger);font-size:12.5px;margin:-6px 0 12px;display:none}
+  .foot-links{display:flex;justify-content:space-between;margin-top:14px;font-size:12px;color:var(--text-soft)}
+  .foot-links a{color:var(--secondary);text-decoration:none;font-weight:600}
+  .seed-note{margin-top:18px;padding:12px;border-radius:var(--r-md);background:var(--surface-low);
+    font-size:11.5px;color:var(--text-soft);line-height:1.5}
+  .seed-note b{color:var(--text)}
+</style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-brand">
+      <div class="mark">Σ</div>
+      <h1>MathEdu LMS</h1>
+      <p>Platform belajar matematika sekolah menengah</p>
+    </div>
+
+    <div class="tabs">
+      <button type="button" class="active" data-mode="password">Email &amp; Sandi</button>
+      <button type="button" data-mode="nis">NIS Siswa</button>
+    </div>
+
+    <form id="login-form">
+      <div class="form-field" id="field-identity">
+        <label id="label-identity">Email</label>
+        <input type="text" id="identity" placeholder="nama@sekolah.sch.id" required>
+      </div>
+      <div class="form-field" id="field-password">
+        <label>Kata Sandi</label>
+        <input type="password" id="password" placeholder="••••••••" required>
+      </div>
+      <div class="err" id="login-err"></div>
+      <button type="submit" class="btn primary" style="width:100%;justify-content:center" id="login-submit">Masuk</button>
+    </form>
+
+    <div class="foot-links">
+      <a href="#" id="forgot-link">Lupa sandi?</a>
+      <span>Butuh bantuan? Hubungi Admin</span>
+    </div>
+
+    <div class="seed-note">
+      <b>Mode demo:</b> jika backend baru pertama kali dipasang, jalankan fungsi
+      <code>seedDatabase()</code> di Apps Script untuk membuat akun contoh:
+      superadmin@sekolah.sch.id, guru@sekolah.sch.id, dan NIS 240801 (password: <code>password123</code>).
+    </div>
+  </div>
+
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script>
+  let mode = "password";
+  document.querySelectorAll(".tabs button").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      document.querySelectorAll(".tabs button").forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      mode = btn.dataset.mode;
+      document.getElementById("label-identity").textContent = mode === "nis" ? "NIS Siswa" : "Email";
+      document.getElementById("identity").placeholder = mode === "nis" ? "cth. 240801" : "nama@sekolah.sch.id";
+    });
+  });
+
+  const form = document.getElementById("login-form");
+  const errBox = document.getElementById("login-err");
+  const submitBtn = document.getElementById("login-submit");
+
+  // Jika sudah login, langsung arahkan ke dashboard sesuai peran
+  (function redirectIfLoggedIn(){
+    const u = LMS_AUTH.getUser();
+    if (u && LMS_AUTH.getToken()) {
+      window.location.href = u.role === "guru" ? "dashboard-guru.html"
+        : u.role === "superadmin" ? "superadmin.html" : "jalur-belajar.html";
+    }
+  })();
+
+  form.addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    errBox.style.display = "none";
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Memproses…";
+    try {
+      const identity = document.getElementById("identity").value.trim();
+      const password = document.getElementById("password").value;
+      const data = await LMS_API.call("login", { mode, identity, password });
+      LMS_AUTH.setSession(data.token, data.user);
+      window.location.href = data.user.role === "guru" ? "dashboard-guru.html"
+        : data.user.role === "superadmin" ? "superadmin.html" : "jalur-belajar.html";
+    } catch (err) {
+      errBox.textContent = err.message;
+      errBox.style.display = "block";
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Masuk";
+    }
+  });
+
+  document.getElementById("forgot-link").addEventListener("click", (e)=>{
+    e.preventDefault();
+    alert("Hubungi admin sekolah untuk mengatur ulang kata sandi Anda.");
+  });
+</script>
+</body>
+</html>

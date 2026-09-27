@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bank Soal & Kuis</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["guru","siswa"]);</script>
+<div id="root"></div>
+<script>
+const root = lmsRenderShell({ activeId: "bank-soal", title: "Bank Soal & Kuis" });
+root.innerHTML = `
+  <div class="breadcrumb">Kurikulum &nbsp;›&nbsp; <b>Bank Soal &amp; Kuis</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">Bank Soal &amp; Kuis</h1>
+      <p>Kelola pustaka soal yang dapat dipakai ulang di berbagai kuis dan bab.</p>
+    </div>
+    <div class="head-actions"><button class="btn primary" id="btn-add">+ Tambah Soal</button></div>
+  </div>
+  <div class="card">
+    <p class="text-body-sm text-muted" style="margin-bottom:10px">
+      Halaman ini adalah kerangka awal. Sambungkan ke backend dengan menambah action baru,
+      misalnya <code>getSoalBank</code> dan <code>addSoalBank</code>, mengikuti pola pada
+      <code>kursus-topik.html</code> dan <code>Code.gs</code>.
+    </p>
+    <div id="soal-list"></div>
+  </div>
+`;
+document.getElementById("btn-add").addEventListener("click", () => lmsToast("Hubungkan tombol ini ke action 'addSoalBank' di Code.gs."));
+document.getElementById("soal-list").innerHTML = `<div class="empty">Belum ada soal tersimpan.</div>`;
+</script>
+</body>
+</html>

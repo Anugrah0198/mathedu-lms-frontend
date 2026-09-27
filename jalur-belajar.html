@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Jalur Belajar</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .step-track{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
+  .step{flex:0 0 auto;min-width:160px;border-radius:var(--r-md);padding:10px 12px;border:1px solid var(--border)}
+  .step.done{background:var(--secondary-container);border-color:transparent}
+  .step.active{background:var(--primary);color:#fff;border-color:transparent}
+  .step.locked{background:var(--surface-low);color:var(--text-soft)}
+  .navsoal{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+  .navsoal button{aspect-ratio:1;border-radius:var(--r-md);border:1px solid var(--border-strong);
+    background:var(--surface);font-weight:700;cursor:pointer}
+  .navsoal button.current{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .navsoal button.answered{background:var(--secondary-container);color:var(--on-secondary);border-color:transparent}
+  .opt{display:flex;align-items:center;gap:12px;border:1px solid var(--border-strong);border-radius:var(--r-md);
+    padding:14px;margin-bottom:10px;cursor:pointer}
+  .opt:hover{background:var(--surface-low)}
+  .opt.selected{border-color:var(--secondary);background:var(--secondary-container)}
+  .opt .letter{width:28px;height:28px;border-radius:50%;background:var(--surface-low);display:flex;
+    align-items:center;justify-content:center;font-weight:700;flex:0 0 auto}
+</style>
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["siswa"]);</script>
+
+<div id="root"></div>
+
+<script>
+const root = lmsRenderShell({ activeId: "jalur-belajar", title: "Jalur Belajar" });
+root.innerHTML = `
+  <div class="breadcrumb">Kurikulum Merdeka &nbsp;›&nbsp; <b>Jalur Belajar</b></div>
+  <div id="path-header" class="card" style="margin-bottom:16px"></div>
+  <div id="path-body"></div>
+`;
+
+let pathData = null;
+
+function renderHeader(d) {
+  document.getElementById("path-header").innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <div class="text-label-sm text-muted">${d.kurikulum}</div>
+        <h1 class="text-headline-md" style="margin:4px 0">${d.judulUnit}</h1>
+      </div>
+      <div style="text-align:right">
+        <div class="text-label-sm text-muted">Status Penyelesaian</div>
+        <div class="text-headline-sm">${d.persenSelesai}% Selesai</div>
+      </div>
+    </div>
+    <div class="progress" style="margin:10px 0"><span style="width:${d.persenSelesai}%"></span></div>
+    <div class="step-track">
+      ${d.steps.map(s => `
+        <div class="step ${s.status}" data-step="${s.id}" style="cursor:${s.status==='locked'?'not-allowed':'pointer'}">
+          <div class="text-body-sm">${s.status==='done'?'✔':s.status==='active'?'▶':'🔒'} ${s.urutan}. ${s.judul}</div>
+          <div class="text-body-sm" style="opacity:.8">${s.subtitle}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+  document.querySelectorAll("[data-step]").forEach(el => el.addEventListener("click", () => {
+    const step = d.steps.find(s => s.id === el.dataset.step);
+    if (step.status === "locked") return lmsToast("Selesaikan aktivitas sebelumnya untuk membuka ini.", true);
+    openStep(step);
+  }));
+}
+
+function openStep(step) {
+  if (step.jenis === "kuis") return loadQuiz(step.id);
+  const body = document.getElementById("path-body");
+  body.innerHTML = `
+    <div class="card">
+      <h2 class="text-headline-sm">${step.judul}</h2>
+      <p class="text-body-sm text-muted" style="margin:8px 0 16px">${step.deskripsi || "Materi pembelajaran."}</p>
+      <div id="link-list" style="display:flex;flex-direction:column;gap:8px"></div>
+      <button class="btn primary" style="margin-top:16px" id="mark-done">Tandai Selesai</button>
+    </div>
+  `;
+  document.getElementById("link-list").innerHTML = (step.links || []).map(l => `
+    <a class="btn" href="${l.url}" target="_blank" rel="noopener">${l.jenis === 'video' ? '▶' : '🔗'} ${l.judul}</a>
+  `).join("") || `<div class="text-body-sm text-muted">Tidak ada tautan tambahan untuk aktivitas ini.</div>`;
+  document.getElementById("mark-done").addEventListener("click", async () => {
+    try {
+      await LMS_API.call("markActivityDone", { activityId: step.id });
+      lmsToast("Aktivitas ditandai selesai.");
+      await loadPath();
+    } catch (err) { lmsToast(err.message, true); }
+  });
+}
+
+// ---------- Quiz ----------
+let quizState = null;
+
+async function loadQuiz(activityId) {
+  const body = document.getElementById("path-body");
+  body.innerHTML = `<div class="card"><div class="skeleton" style="height:220px"></div></div>`;
+  try {
+    quizState = await LMS_API.call("getQuiz", { activityId });
+    quizState.current = 0;
+    quizState.answers = quizState.answers || {};
+    renderQuiz();
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
+
+function renderQuiz() {
+  const q = quizState;
+  const soal = q.soal[q.current];
+  const body = document.getElementById("path-body");
+  body.innerHTML = `
+    <div class="grid" style="grid-template-columns:2fr 1fr;gap:16px;align-items:start">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div>
+            <div class="text-headline-sm">Soal No. ${q.current + 1} dari ${q.soal.length}</div>
+            <div class="text-body-sm text-muted">${q.judul}</div>
+          </div>
+          <span class="chip warn">⏱ ${q.durasiMenit} menit</span>
+        </div>
+        <p class="text-body-lg" style="margin-bottom:16px">${soal.pertanyaan}</p>
+        <div id="opt-list"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:16px">
+          <button class="btn" id="btn-prev" ${q.current===0?"disabled":""}>← Sebelumnya</button>
+          <button class="btn primary" id="btn-next">${q.current === q.soal.length-1 ? "Selesai & Kirim" : "Simpan & Lanjut →"}</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3 class="text-headline-sm" style="margin-bottom:10px">Navigasi Soal</h3>
+        <div class="navsoal" id="navsoal"></div>
+        <div class="text-body-sm text-muted" style="margin-top:12px">Terjawab: ${Object.keys(q.answers).length}/${q.soal.length}</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("opt-list").innerHTML = soal.opsi.map((o, i) => `
+    <div class="opt ${q.answers[soal.id] === o.id ? "selected" : ""}" data-opt="${o.id}">
+      <div class="letter">${String.fromCharCode(65+i)}</div>
+      <div>${o.teks}</div>
+    </div>
+  `).join("");
+  document.querySelectorAll("[data-opt]").forEach(el => el.addEventListener("click", () => {
+    quizState.answers[soal.id] = el.dataset.opt;
+    renderQuiz();
+  }));
+
+  document.getElementById("navsoal").innerHTML = q.soal.map((s, i) => `
+    <button class="${i===q.current?"current":""} ${q.answers[s.id]?"answered":""}" data-goto="${i}">${i+1}</button>
+  `).join("");
+  document.querySelectorAll("[data-goto]").forEach(el => el.addEventListener("click", () => {
+    quizState.current = Number(el.dataset.goto);
+    renderQuiz();
+  }));
+
+  document.getElementById("btn-prev").addEventListener("click", () => { quizState.current--; renderQuiz(); });
+  document.getElementById("btn-next").addEventListener("click", async () => {
+    if (q.current === q.soal.length - 1) {
+      try {
+        const result = await LMS_API.call("submitQuiz", { activityId: q.activityId, answers: q.answers });
+        document.getElementById("path-body").innerHTML = `
+          <div class="card" style="text-align:center;padding:40px">
+            <div class="text-headline-md">Kuis Selesai 🎉</div>
+            <div class="text-metric" style="margin:12px 0">${result.skor} / 100</div>
+            <p class="text-body-sm text-muted">${result.lulus ? "Selamat, Anda memenuhi KKM. Aktivitas berikutnya sudah terbuka." : "Skor belum memenuhi KKM. Anda dapat mencoba lagi jika kesempatan masih tersedia."}</p>
+            <button class="btn primary" style="margin-top:16px" id="back-to-path">Kembali ke Jalur Belajar</button>
+          </div>`;
+        document.getElementById("back-to-path").addEventListener("click", loadPath);
+      } catch (err) { lmsToast(err.message, true); }
+    } else {
+      quizState.current++; renderQuiz();
+    }
+  });
+}
+
+async function loadPath() {
+  document.getElementById("path-body").innerHTML = "";
+  try {
+    pathData = await LMS_API.call("getStudentPath", {});
+    renderHeader(pathData);
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
+loadPath();
+</script>
+</body>
+</html>

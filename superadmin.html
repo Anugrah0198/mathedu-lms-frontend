@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Dashboard Superadmin</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["superadmin"]);</script>
+
+<div id="root"></div>
+<div class="modal-bg" id="modal-bg" style="position:fixed;inset:0;background:rgba(11,29,44,.5);display:none;align-items:center;justify-content:center;z-index:40">
+  <div class="modal" style="background:var(--surface);border-radius:var(--r-lg);padding:22px;width:100%;max-width:420px;box-shadow:var(--shadow-3)">
+    <h3 class="text-headline-sm" style="margin-bottom:14px">Tambah Pengguna</h3>
+    <form id="add-user-form">
+      <div class="form-field"><label>Nama Lengkap</label><input id="u-name" required></div>
+      <div class="form-field"><label>Email</label><input id="u-email" type="email" required></div>
+      <div class="form-field"><label>Peran</label>
+        <select id="u-role"><option value="guru">Guru</option><option value="siswa">Siswa</option><option value="superadmin">Admin</option></select>
+      </div>
+      <div class="form-field"><label>Kelas / Bagian</label><input id="u-kelas" placeholder="mis. Matematika 8A"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" id="cancel-add-user">Batal</button>
+        <button type="submit" class="btn primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const root = lmsRenderShell({ activeId: "superadmin", title: "Dashboard Superadmin" });
+
+root.innerHTML = `
+  <div class="breadcrumb">Administrasi &nbsp;›&nbsp; <b>Dashboard Superadmin</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">Dashboard Superadmin — Sekolah Ini</h1>
+      <p>Kelola akun, keamanan, dan pemakaian sumber daya LMS sekolah.</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn primary" id="btn-add-user">+ Tambah Admin/Guru</button>
+      <button class="btn" id="btn-security">Kebijakan Keamanan</button>
+      <button class="btn" id="btn-import">Impor Pengguna (CSV)</button>
+    </div>
+  </div>
+
+  <div class="grid grid-3" style="margin-bottom:16px" id="stat-tiles"></div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h2 class="text-headline-sm" style="margin-bottom:10px">Pengguna &amp; Peran</h2>
+    <table class="dt">
+      <thead><tr><th>Nama</th><th>Peran</th><th>Kelas/Bagian</th><th>Status</th></tr></thead>
+      <tbody id="user-table"></tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2 class="text-headline-sm" style="margin-bottom:10px">Log Audit Terbaru</h2>
+    <div id="audit-log" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+`;
+
+function renderStats(s) {
+  document.getElementById("stat-tiles").innerHTML = `
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.totalPengguna}</div><div class="label">Total Pengguna Aktif</div></div><div class="ic mint">👥</div></div></div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.storagePersen}%</div><div class="label">Pemakaian Penyimpanan (Drive)</div></div><div class="ic mint">💾</div></div></div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.kuotaGasPersen}%</div><div class="label">Kuota Backend (Apps Script)</div></div><div class="ic warn">⚙</div></div></div>
+  `;
+}
+
+function renderUsers(users) {
+  document.getElementById("user-table").innerHTML = users.map(u => `
+    <tr>
+      <td style="display:flex;gap:10px;align-items:center"><div class="avatar-sm">${lmsInitials(u.nama)}</div>${u.nama}</td>
+      <td>${u.role}</td>
+      <td>${u.kelas || "—"}</td>
+      <td><span class="chip done">${u.status}</span></td>
+    </tr>
+  `).join("") || `<tr><td colspan="4"><div class="empty">Belum ada pengguna lain.</div></td></tr>`;
+}
+
+function renderAudit(logs) {
+  document.getElementById("audit-log").innerHTML = logs.map(l => `
+    <div class="text-body-sm" style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <b>${l.aktor}</b> ${l.aksi} <span class="text-muted">· ${l.waktu}</span>
+    </div>
+  `).join("") || `<div class="empty">Belum ada aktivitas tercatat.</div>`;
+}
+
+async function load() {
+  document.getElementById("stat-tiles").innerHTML = Array(3).fill('<div class="card skeleton" style="height:88px"></div>').join("");
+  try {
+    const data = await LMS_API.call("getSuperadminOverview", {});
+    renderStats(data.stats);
+    renderUsers(data.users);
+    renderAudit(data.auditLog);
+  } catch (err) {
+    lmsToast(err.message, true);
+    renderStats({ totalPengguna: "–", storagePersen: 0, kuotaGasPersen: 0 });
+    renderUsers([]); renderAudit([]);
+  }
+}
+load();
+
+const modalBg = document.getElementById("modal-bg");
+document.getElementById("btn-add-user").addEventListener("click", () => modalBg.style.display = "flex");
+document.getElementById("cancel-add-user").addEventListener("click", () => modalBg.style.display = "none");
+document.getElementById("btn-security").addEventListener("click", () => lmsToast("Halaman kebijakan keamanan dapat dikembangkan di pengaturan.html."));
+document.getElementById("btn-import").addEventListener("click", () => lmsToast("Impor CSV: kirim isi file ke action 'importUsersCsv' di backend."));
+
+document.getElementById("add-user-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await LMS_API.call("addUser", {
+      nama: document.getElementById("u-name").value,
+      email: document.getElementById("u-email").value,
+      role: document.getElementById("u-role").value,
+      kelas: document.getElementById("u-kelas").value
+    });
+    lmsToast("Pengguna berhasil ditambahkan.");
+    modalBg.style.display = "none";
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+</script>
+</body>
+</html>

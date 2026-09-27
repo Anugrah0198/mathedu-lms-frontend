@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Buku Nilai</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["guru", "siswa", "superadmin"]);</script>
+
+<div id="root"></div>
+
+<script>
+const root = lmsRenderShell({ activeId: "buku-nilai", title: "Buku Nilai" });
+const isStudent = user.role === "siswa";
+
+root.innerHTML = `
+  <div class="breadcrumb">Akademik &nbsp;›&nbsp; Evaluasi &amp; Hasil &nbsp;›&nbsp; <b>Buku Nilai</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">${isStudent ? "Nilai Saya" : "Buku Nilai & Rekapitulasi Prestasi Siswa"}</h1>
+      <p>${isStudent ? "Pantau capaian tugas, kuis, dan ujian Anda semester ini." : "Manajemen capaian belajar siswa, pemantauan KKM, dan distribusi evaluasi formatif."}</p>
+    </div>
+    ${isStudent ? "" : `<div class="head-actions">
+      <button class="btn" id="btn-export">Ekspor CSV/Excel</button>
+      <button class="btn primary" id="btn-remedial">Buat Sesi Remedial Baru</button>
+    </div>`}
+  </div>
+
+  <div class="grid grid-4" id="stat-tiles" style="margin-bottom:16px"></div>
+
+  <div class="card">
+    <div style="overflow-x:auto">
+      <table class="dt" id="grade-table">
+        <thead><tr id="grade-head"></tr></thead>
+        <tbody id="grade-body"></tbody>
+      </table>
+    </div>
+  </div>
+`;
+
+function renderStats(s) {
+  document.getElementById("stat-tiles").innerHTML = `
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.rataRata}</div><div class="label">Rata-rata Kelas</div></div><div class="ic mint">📊</div></div></div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.ketuntasanPersen}%</div><div class="label">Ketuntasan (≥ KKM)</div></div><div class="ic mint">✅</div></div></div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.remedialCount}</div><div class="label">Remedial Dibutuhkan</div></div><div class="ic warn">⚠️</div></div></div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.tugasTerkumpulPersen}%</div><div class="label">Tugas Terkumpul</div></div><div class="ic mint">📥</div></div></div>
+  `;
+}
+
+function statusChip(status) {
+  const map = { tuntas: "chip done", remedial: "chip warn", "belum-lengkap": "chip locked", "sangat-baik": "chip done" };
+  return `<span class="${map[status] || 'chip'}">${status.replace("-", " ")}</span>`;
+}
+
+function renderTable(cols, rows) {
+  document.getElementById("grade-head").innerHTML =
+    (isStudent ? "" : "<th>Siswa &amp; NIS</th>") +
+    cols.map(c => `<th>${c}</th>`).join("") + "<th>Nilai Akhir</th><th>Status</th>";
+
+  document.getElementById("grade-body").innerHTML = rows.map(r => `
+    <tr>
+      ${isStudent ? "" : `<td style="display:flex;gap:10px;align-items:center">
+        <div class="avatar-sm">${lmsInitials(r.nama)}</div>
+        <div><div class="text-label-lg">${r.nama}</div><div class="text-body-sm text-muted">NIS: ${r.nis}</div></div>
+      </td>`}
+      ${cols.map(c => `<td>${r.nilai[c] ?? "—"}</td>`).join("")}
+      <td class="text-metric" style="font-size:15px">${r.nilaiAkhir}</td>
+      <td>${statusChip(r.status)}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="10"><div class="empty">Belum ada data nilai.</div></td></tr>`;
+}
+
+async function load() {
+  document.getElementById("stat-tiles").innerHTML = Array(4).fill('<div class="card skeleton" style="height:88px"></div>').join("");
+  try {
+    const data = await LMS_API.call("getGradebook", {});
+    renderStats(data.stats);
+    renderTable(data.columns, data.rows);
+  } catch (err) {
+    lmsToast(err.message, true);
+    renderStats({ rataRata: "–", ketuntasanPersen: 0, remedialCount: 0, tugasTerkumpulPersen: 0 });
+    renderTable([], []);
+  }
+}
+load();
+
+document.getElementById("btn-export")?.addEventListener("click", () => lmsToast("Ekspor akan diunduh sebagai CSV (implementasikan di backend sesuai kebutuhan)."));
+document.getElementById("btn-remedial")?.addEventListener("click", () => lmsToast("Fitur penjadwalan remedial dapat ditambahkan pada action 'createRemedialSession'."));
+</script>
+</body>
+</html>

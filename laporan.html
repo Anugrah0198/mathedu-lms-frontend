@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Laporan & Analitik</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["guru"]);</script>
+<div id="root"></div>
+<script>
+const root = lmsRenderShell({ activeId: "laporan", title: "Laporan & Analitik" });
+root.innerHTML = `
+  <div class="breadcrumb">Akademik &nbsp;›&nbsp; <b>Laporan &amp; Analitik</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">Laporan &amp; Analitik</h1>
+      <p>Ringkasan performa kelas lintas waktu — sambungkan ke data Buku Nilai dan Jalur Belajar.</p>
+    </div>
+  </div>
+  <div class="card">
+    <p class="text-body-sm text-muted">
+      Kerangka halaman. Tambahkan action <code>getLaporanAnalitik</code> di <code>Code.gs</code> yang mengagregasi
+      data dari sheet Grades &amp; QuizAttempts, lalu render dengan chart (mis. Chart.js) di sini.
+    </p>
+  </div>
+`;
+</script>
+</body>
+</html>

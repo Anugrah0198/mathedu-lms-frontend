@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kelola Pengguna</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .modal-bg{position:fixed;inset:0;background:rgba(11,29,44,.5);display:none;align-items:center;justify-content:center;z-index:40}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--surface);border-radius:var(--r-lg);padding:22px;width:100%;max-width:440px;box-shadow:var(--shadow-3)}
+  .tabs-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tabs-row button{border:1px solid var(--border-strong);background:var(--surface);border-radius:var(--r-full);
+    padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--text-soft)}
+  .tabs-row button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .row-actions{display:flex;gap:6px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["superadmin"]);</script>
+
+<div id="root"></div>
+
+<!-- Modal: Tambah Pengguna -->
+<div class="modal-bg" id="modal-add">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:14px">Tambah Pengguna</h3>
+    <form id="form-add">
+      <div class="form-field"><label>Nama Lengkap</label><input id="add-nama" required></div>
+      <div class="form-field"><label>Email</label><input id="add-email" type="email" required></div>
+      <div class="form-field"><label>Peran</label>
+        <select id="add-role"><option value="siswa">Siswa</option><option value="guru">Guru</option><option value="superadmin">Admin</option></select>
+      </div>
+      <div class="form-field"><label>NIS (khusus siswa)</label><input id="add-nis" placeholder="mis. 240803"></div>
+      <div class="form-field"><label>Kelas / Bagian</label><input id="add-kelas" placeholder="mis. 8A"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-add">Batal</button>
+        <button type="submit" class="btn primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Edit Pengguna -->
+<div class="modal-bg" id="modal-edit">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:14px">Edit Data Pengguna</h3>
+    <form id="form-edit">
+      <input type="hidden" id="edit-id">
+      <div class="form-field"><label>Nama Lengkap</label><input id="edit-nama" required></div>
+      <div class="form-field"><label>Email</label><input id="edit-email" type="email" required></div>
+      <div class="form-field"><label>Peran</label>
+        <select id="edit-role"><option value="siswa">Siswa</option><option value="guru">Guru</option><option value="superadmin">Admin</option></select>
+      </div>
+      <div class="form-field"><label>NIS</label><input id="edit-nis"></div>
+      <div class="form-field"><label>Kelas / Bagian</label><input id="edit-kelas"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-edit">Batal</button>
+        <button type="submit" class="btn primary">Simpan Perubahan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Impor Massal -->
+<div class="modal-bg" id="modal-import">
+  <div class="modal" style="max-width:560px">
+    <h3 class="text-headline-sm" style="margin-bottom:6px">Impor Pengguna Secara Massal</h3>
+    <p class="text-body-sm text-muted" style="margin-bottom:12px">
+      Satu baris = satu pengguna, format: <code>nama, email, nis, peran, kelas</code>.
+      Kolom NIS boleh dikosongkan untuk guru/admin. Kata sandi default untuk semua akun: <code>password123</code>.
+    </p>
+    <form id="form-import">
+      <div class="form-field">
+        <textarea id="import-text" rows="8" placeholder="Contoh:
+Ahmad Fauzi, ahmad@sekolah.sch.id, 240810, siswa, 8B
+Rina Wulandari, rina.guru@sekolah.sch.id, , guru, Matematika Kelas 9"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-import">Batal</button>
+        <button type="submit" class="btn primary">Impor Sekarang</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const root = lmsRenderShell({ activeId: "kelola-pengguna", title: "Kelola Pengguna" });
+
+root.innerHTML = `
+  <div class="breadcrumb">Administrasi &nbsp;›&nbsp; <b>Kelola Pengguna</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">Kelola Pengguna</h1>
+      <p>Daftar guru dan siswa beserta ID pegawai/NISN, email, dan status akun.</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn" id="btn-open-import">Impor Massal (CSV)</button>
+      <button class="btn primary" id="btn-open-add">+ Tambah Pengguna</button>
+    </div>
+  </div>
+
+  <div class="tabs-row" id="tabs-role">
+    <button class="active" data-role="">Semua</button>
+    <button data-role="guru">Guru</button>
+    <button data-role="siswa">Siswa</button>
+    <button data-role="superadmin">Admin</button>
+  </div>
+
+  <div class="card">
+    <table class="dt">
+      <thead><tr><th>Nama</th><th>Email</th><th>NIS</th><th>Peran</th><th>Kelas/Bagian</th><th>Status</th><th>Aksi</th></tr></thead>
+      <tbody id="user-body"></tbody>
+    </table>
+  </div>
+`;
+
+let allUsers = [];
+let currentRole = "";
+
+function roleChip(role) {
+  const map = { superadmin: "chip active", guru: "chip done", siswa: "chip" };
+  return `<span class="${map[role] || 'chip'}">${role}</span>`;
+}
+
+function renderTable(users) {
+  document.getElementById("user-body").innerHTML = users.map(u => `
+    <tr>
+      <td style="display:flex;gap:10px;align-items:center"><div class="avatar-sm">${lmsInitials(u.nama)}</div>${u.nama}</td>
+      <td>${u.email}</td>
+      <td>${u.nis || "—"}</td>
+      <td>${roleChip(u.role)}</td>
+      <td>${u.kelas || "—"}</td>
+      <td><span class="chip ${u.status === 'aktif' ? 'done' : 'locked'}">${u.status}</span></td>
+      <td>
+        <div class="row-actions">
+          <button class="btn sm" data-edit="${u.id}">Edit</button>
+          <button class="btn sm" data-reset="${u.id}">Reset Sandi</button>
+          <button class="btn sm" data-toggle="${u.id}" data-status="${u.status}">${u.status === "aktif" ? "Nonaktifkan" : "Aktifkan"}</button>
+          ${u.role !== "superadmin" ? `<button class="btn sm" data-impersonate="${u.id}">Masuk Sebagai</button>` : ""}
+        </div>
+      </td>
+    </tr>
+  `).join("") || `<tr><td colspan="7"><div class="empty">Tidak ada pengguna pada kategori ini.</div></td></tr>`;
+
+  document.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => openEdit(b.dataset.edit)));
+  document.querySelectorAll("[data-reset]").forEach(b => b.addEventListener("click", () => doReset(b.dataset.reset)));
+  document.querySelectorAll("[data-toggle]").forEach(b => b.addEventListener("click", () => doToggleStatus(b.dataset.toggle, b.dataset.status)));
+  document.querySelectorAll("[data-impersonate]").forEach(b => b.addEventListener("click", () => doImpersonate(b.dataset.impersonate)));
+}
+
+async function load() {
+  document.getElementById("user-body").innerHTML = `<tr><td colspan="7"><div class="card skeleton" style="height:60px"></div></td></tr>`;
+  try {
+    allUsers = await LMS_API.call("getUsersList", currentRole ? { role: currentRole } : {});
+    renderTable(allUsers);
+  } catch (err) {
+    lmsToast(err.message, true);
+    renderTable([]);
+  }
+}
+load();
+
+document.querySelectorAll("#tabs-role button").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll("#tabs-role button").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  currentRole = btn.dataset.role;
+  load();
+}));
+
+// ---------- Modal helpers ----------
+function openModal(id) { document.getElementById(id).classList.add("open"); }
+function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => closeModal(b.dataset.close)));
+
+document.getElementById("btn-open-add").addEventListener("click", () => openModal("modal-add"));
+document.getElementById("btn-open-import").addEventListener("click", () => openModal("modal-import"));
+
+document.getElementById("form-add").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const res = await LMS_API.call("addUser", {
+      nama: document.getElementById("add-nama").value,
+      email: document.getElementById("add-email").value,
+      role: document.getElementById("add-role").value,
+      nis: document.getElementById("add-nis").value,
+      kelas: document.getElementById("add-kelas").value
+    });
+    lmsToast(`Pengguna ditambahkan. Kata sandi awal: ${res.defaultPassword}`);
+    closeModal("modal-add");
+    e.target.reset();
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+function openEdit(id) {
+  const u = allUsers.find(x => x.id === id);
+  if (!u) return;
+  document.getElementById("edit-id").value = u.id;
+  document.getElementById("edit-nama").value = u.nama;
+  document.getElementById("edit-email").value = u.email;
+  document.getElementById("edit-role").value = u.role;
+  document.getElementById("edit-nis").value = u.nis || "";
+  document.getElementById("edit-kelas").value = u.kelas || "";
+  openModal("modal-edit");
+}
+document.getElementById("form-edit").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await LMS_API.call("updateUser", {
+      id: document.getElementById("edit-id").value,
+      nama: document.getElementById("edit-nama").value,
+      email: document.getElementById("edit-email").value,
+      role: document.getElementById("edit-role").value,
+      nis: document.getElementById("edit-nis").value,
+      kelas: document.getElementById("edit-kelas").value
+    });
+    lmsToast("Data pengguna diperbarui.");
+    closeModal("modal-edit");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+document.getElementById("form-import").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const lines = document.getElementById("import-text").value.split("\n").map(l => l.trim()).filter(Boolean);
+  const rows = lines.map(l => {
+    const [nama, email, nis, role, kelas] = l.split(",").map(s => (s || "").trim());
+    return { nama, email, nis, role: role || "siswa", kelas };
+  });
+  if (!rows.length) return lmsToast("Tidak ada baris untuk diimpor.", true);
+  try {
+    const hasil = await LMS_API.call("addUsersBulk", { rows });
+    lmsToast(`Berhasil: ${hasil.berhasil} pengguna. Gagal: ${hasil.gagal.length}.`, hasil.gagal.length > 0);
+    if (hasil.gagal.length) console.warn("Baris gagal diimpor:", hasil.gagal);
+    closeModal("modal-import");
+    e.target.reset();
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+async function doReset(id) {
+  if (!confirm("Reset kata sandi pengguna ini ke kata sandi default?")) return;
+  try {
+    const res = await LMS_API.call("resetPassword", { id });
+    alert("Kata sandi berhasil direset ke: " + res.defaultPassword);
+  } catch (err) { lmsToast(err.message, true); }
+}
+
+async function doToggleStatus(id, currentStatus) {
+  const next = currentStatus === "aktif" ? "nonaktif" : "aktif";
+  if (!confirm(next === "nonaktif" ? "Nonaktifkan akun ini?" : "Aktifkan kembali akun ini?")) return;
+  try {
+    await LMS_API.call("setUserStatus", { id, status: next });
+    lmsToast("Status akun diperbarui.");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+}
+
+async function doImpersonate(id) {
+  const u = allUsers.find(x => x.id === id);
+  if (!u) return;
+  if (!confirm(`Masuk sebagai ${u.nama} (${u.role})? Anda akan beralih dari sesi Superadmin.`)) return;
+  try {
+    const res = await LMS_API.call("impersonateUser", { userId: id });
+    LMS_AUTH.setSession(res.token, res.user);
+    window.location.href = res.user.role === "guru" ? "dashboard-guru.html" : "jalur-belajar.html";
+  } catch (err) { lmsToast(err.message, true); }
+}
+</script>
+</body>
+</html>

@@ -11,87 +11,110 @@
 <script src="assets/js/config.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/shell.js"></script>
-<script>const user = LMS_AUTH.requireRole(["guru", "siswa", "superadmin"]);</script>
+<script>const user = LMS_AUTH.requireRole(["superadmin", "guru", "siswa"]);</script>
 
 <div id="root"></div>
 
 <script>
-const root = lmsRenderShell({ activeId: "buku-nilai", title: "Buku Nilai" });
-const isStudent = user.role === "siswa";
+const titleMap = { superadmin: "Rekap Nilai Sekolah", guru: "Buku Nilai", siswa: "Nilai Saya" };
+const descMap = {
+  superadmin: "Rekap nilai seluruh siswa lintas kelas untuk pemantauan capaian sekolah.",
+  guru: "Rekap nilai tugas, kuis, dan ujian seluruh siswa di kelas Anda.",
+  siswa: "Rincian nilai tugas, kuis, dan ujian Anda pada mata pelajaran ini."
+};
+const root = lmsRenderShell({ activeId: "buku-nilai", title: titleMap[user.role] });
 
 root.innerHTML = `
-  <div class="breadcrumb">Akademik &nbsp;›&nbsp; Evaluasi &amp; Hasil &nbsp;›&nbsp; <b>Buku Nilai</b></div>
+  <div class="breadcrumb">${user.role === "siswa" ? "Panel Siswa" : "Panel " + (user.role === "superadmin" ? "Administrator" : "Guru")} &nbsp;›&nbsp; <b>${titleMap[user.role]}</b></div>
   <div class="page-head">
     <div class="title">
-      <h1 class="text-headline-lg">${isStudent ? "Nilai Saya" : "Buku Nilai & Rekapitulasi Prestasi Siswa"}</h1>
-      <p>${isStudent ? "Pantau capaian tugas, kuis, dan ujian Anda semester ini." : "Manajemen capaian belajar siswa, pemantauan KKM, dan distribusi evaluasi formatif."}</p>
+      <h1 class="text-headline-lg">${titleMap[user.role]}</h1>
+      <p>${descMap[user.role]}</p>
     </div>
-    ${isStudent ? "" : `<div class="head-actions">
-      <button class="btn" id="btn-export">Ekspor CSV/Excel</button>
-      <button class="btn primary" id="btn-remedial">Buat Sesi Remedial Baru</button>
-    </div>`}
+    <div class="head-actions" id="head-actions"></div>
   </div>
 
-  <div class="grid grid-4" id="stat-tiles" style="margin-bottom:16px"></div>
+  <div class="grid grid-4" style="margin-bottom:16px" id="stat-tiles"></div>
+
+  <div class="card" style="margin-bottom:16px; background:var(--surface-low); border-style:dashed">
+    <p class="text-body-sm text-muted">
+      <b>Catatan:</b> Komponen nilai (Tugas 1/2, Kuis 1/2, PTS/Ujian) diinput oleh guru langsung melalui sheet
+      <code>Grades</code> pada Google Sheet database. Halaman ini menampilkan rekap otomatis dan mendukung ekspor ke CSV.
+    </p>
+  </div>
 
   <div class="card">
-    <div style="overflow-x:auto">
-      <table class="dt" id="grade-table">
-        <thead><tr id="grade-head"></tr></thead>
-        <tbody id="grade-body"></tbody>
-      </table>
-    </div>
+    <table class="dt">
+      <thead><tr id="head-row"><th>Nama</th><th>NIS</th></tr></thead>
+      <tbody id="grade-body"></tbody>
+    </table>
   </div>
 `;
 
-function renderStats(s) {
-  document.getElementById("stat-tiles").innerHTML = `
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.rataRata}</div><div class="label">Rata-rata Kelas</div></div><div class="ic mint">📊</div></div></div>
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.ketuntasanPersen}%</div><div class="label">Ketuntasan (≥ KKM)</div></div><div class="ic mint">✅</div></div></div>
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.remedialCount}</div><div class="label">Remedial Dibutuhkan</div></div><div class="ic warn">⚠️</div></div></div>
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.tugasTerkumpulPersen}%</div><div class="label">Tugas Terkumpul</div></div><div class="ic mint">📥</div></div></div>
-  `;
+if (user.role !== "siswa") {
+  document.getElementById("head-actions").innerHTML = `<button class="btn primary" id="btn-export">⬇ Unduh CSV</button>`;
 }
+
+const statMeta = [
+  { key: "rataRata", label: "Rata-rata Nilai Akhir", ic: "📈" },
+  { key: "ketuntasanPersen", label: "Persentase Ketuntasan", ic: "✅", suffix: "%" },
+  { key: "remedialCount", label: "Siswa Perlu Remedial", ic: "⚠" },
+  { key: "tugasTerkumpulPersen", label: "Tugas Terkumpul", ic: "📥", suffix: "%" }
+];
 
 function statusChip(status) {
-  const map = { tuntas: "chip done", remedial: "chip warn", "belum-lengkap": "chip locked", "sangat-baik": "chip done" };
-  return `<span class="${map[status] || 'chip'}">${status.replace("-", " ")}</span>`;
+  const map = { "sangat-baik": "chip done", tuntas: "chip active", remedial: "chip warn", "belum-lengkap": "chip locked" };
+  const label = { "sangat-baik": "Sangat Baik", tuntas: "Tuntas", remedial: "Remedial", "belum-lengkap": "Belum Lengkap" }[status] || status;
+  return `<span class="${map[status] || 'chip'}">${label}</span>`;
 }
 
-function renderTable(cols, rows) {
-  document.getElementById("grade-head").innerHTML =
-    (isStudent ? "" : "<th>Siswa &amp; NIS</th>") +
-    cols.map(c => `<th>${c}</th>`).join("") + "<th>Nilai Akhir</th><th>Status</th>";
+function renderStats(s) {
+  document.getElementById("stat-tiles").innerHTML = statMeta.map(m => `
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s[m.key] ?? "–"}${m.suffix || ""}</div><div class="label">${m.label}</div></div><div class="ic mint">${m.ic}</div></div></div>
+  `).join("");
+}
 
-  document.getElementById("grade-body").innerHTML = rows.map(r => `
+function render(gb) {
+  document.getElementById("head-row").innerHTML = `<th>Nama</th><th>NIS</th>` + gb.columns.map(c => `<th>${c}</th>`).join("") + `<th>Nilai Akhir</th><th>Status</th>`;
+  document.getElementById("grade-body").innerHTML = gb.rows.map(r => `
     <tr>
-      ${isStudent ? "" : `<td style="display:flex;gap:10px;align-items:center">
-        <div class="avatar-sm">${lmsInitials(r.nama)}</div>
-        <div><div class="text-label-lg">${r.nama}</div><div class="text-body-sm text-muted">NIS: ${r.nis}</div></div>
-      </td>`}
-      ${cols.map(c => `<td>${r.nilai[c] ?? "—"}</td>`).join("")}
-      <td class="text-metric" style="font-size:15px">${r.nilaiAkhir}</td>
+      <td style="display:flex;gap:10px;align-items:center"><div class="avatar-sm">${lmsInitials(r.nama)}</div>${r.nama}</td>
+      <td>${r.nis}</td>
+      ${gb.columns.map(c => `<td>${r.nilai[c] === "" || r.nilai[c] === undefined ? "—" : r.nilai[c]}</td>`).join("")}
+      <td><b>${r.nilaiAkhir}</b></td>
       <td>${statusChip(r.status)}</td>
     </tr>
-  `).join("") || `<tr><td colspan="10"><div class="empty">Belum ada data nilai.</div></td></tr>`;
+  `).join("") || `<tr><td colspan="${gb.columns.length + 4}"><div class="empty">Belum ada data nilai.</div></td></tr>`;
 }
 
 async function load() {
   document.getElementById("stat-tiles").innerHTML = Array(4).fill('<div class="card skeleton" style="height:88px"></div>').join("");
   try {
-    const data = await LMS_API.call("getGradebook", {});
-    renderStats(data.stats);
-    renderTable(data.columns, data.rows);
+    const gb = await LMS_API.call("getGradebook", {});
+    renderStats(gb.stats);
+    render(gb);
   } catch (err) {
     lmsToast(err.message, true);
-    renderStats({ rataRata: "–", ketuntasanPersen: 0, remedialCount: 0, tugasTerkumpulPersen: 0 });
-    renderTable([], []);
+    renderStats({});
   }
 }
 load();
 
-document.getElementById("btn-export")?.addEventListener("click", () => lmsToast("Ekspor akan diunduh sebagai CSV (implementasikan di backend sesuai kebutuhan)."));
-document.getElementById("btn-remedial")?.addEventListener("click", () => lmsToast("Fitur penjadwalan remedial dapat ditambahkan pada action 'createRemedialSession'."));
+if (user.role !== "siswa") {
+  document.getElementById("btn-export").addEventListener("click", async () => {
+    const btn = document.getElementById("btn-export");
+    btn.disabled = true; btn.textContent = "Menyiapkan berkas…";
+    try {
+      const res = await LMS_API.call("exportGradesCsv", {});
+      lmsToast("Berkas CSV berhasil dibuat.");
+      window.open(res.url, "_blank");
+    } catch (err) {
+      lmsToast(err.message, true);
+    } finally {
+      btn.disabled = false; btn.textContent = "⬇ Unduh CSV";
+    }
+  });
+}
 </script>
 </body>
 </html>

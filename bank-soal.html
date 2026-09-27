@@ -6,35 +6,168 @@
 <title>Bank Soal & Kuis</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .opt-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .opt-row input[type="text"]{flex:1}
+</style>
 </head>
 <body>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/shell.js"></script>
-<script>const user = LMS_AUTH.requireRole(["guru","siswa"]);</script>
+<script>const user = LMS_AUTH.requireRole(["guru", "superadmin"]);</script>
+
 <div id="root"></div>
+
 <script>
 const root = lmsRenderShell({ activeId: "bank-soal", title: "Bank Soal & Kuis" });
+
 root.innerHTML = `
-  <div class="breadcrumb">Kurikulum &nbsp;›&nbsp; <b>Bank Soal &amp; Kuis</b></div>
+  <div class="breadcrumb">Panel Guru &nbsp;›&nbsp; <b>Bank Soal &amp; Kuis</b></div>
   <div class="page-head">
     <div class="title">
       <h1 class="text-headline-lg">Bank Soal &amp; Kuis</h1>
-      <p>Kelola pustaka soal yang dapat dipakai ulang di berbagai kuis dan bab.</p>
+      <p>Tambahkan soal ke aktivitas kuis, impor massal, dan lihat analisis butir soal.</p>
     </div>
-    <div class="head-actions"><button class="btn primary" id="btn-add">+ Tambah Soal</button></div>
   </div>
-  <div class="card">
-    <p class="text-body-sm text-muted" style="margin-bottom:10px">
-      Halaman ini adalah kerangka awal. Sambungkan ke backend dengan menambah action baru,
-      misalnya <code>getSoalBank</code> dan <code>addSoalBank</code>, mengikuti pola pada
-      <code>kursus-topik.html</code> dan <code>Code.gs</code>.
-    </p>
-    <div id="soal-list"></div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="form-field" style="margin-bottom:0">
+      <label>Pilih Aktivitas Kuis</label>
+      <select id="sel-kuis"></select>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+    <div class="card">
+      <h2 class="text-headline-sm" style="margin-bottom:12px">Tambah Soal Manual</h2>
+      <form id="form-soal">
+        <div class="form-field"><label>Pertanyaan</label><textarea id="s-pertanyaan" rows="2" required></textarea></div>
+        <div class="form-field"><label>Pilihan Jawaban (tandai kotak untuk kunci jawaban benar)</label>
+          <div class="opt-row"><input type="checkbox" name="benar" value="a"><input type="text" id="s-opt-a" placeholder="Opsi A" required></div>
+          <div class="opt-row"><input type="checkbox" name="benar" value="b"><input type="text" id="s-opt-b" placeholder="Opsi B" required></div>
+          <div class="opt-row"><input type="checkbox" name="benar" value="c"><input type="text" id="s-opt-c" placeholder="Opsi C" required></div>
+          <div class="opt-row"><input type="checkbox" name="benar" value="d"><input type="text" id="s-opt-d" placeholder="Opsi D" required></div>
+        </div>
+        <div class="form-field"><label>Kompetensi Dasar (KD, opsional)</label><input id="s-kd" placeholder="mis. 3.6"></div>
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center">+ Tambahkan Soal</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 class="text-headline-sm" style="margin-bottom:6px">Impor Soal Massal</h2>
+      <p class="text-body-sm text-muted" style="margin-bottom:10px">
+        Satu baris = satu soal, format dipisah tanda <code>|</code>:<br>
+        <code>pertanyaan | opsi A | opsi B | opsi C | opsi D | kunci(A/B/C/D) | kd</code>
+      </p>
+      <form id="form-import">
+        <div class="form-field">
+          <textarea id="import-text" rows="7" placeholder="Berapa 12 x 12?|144|121|132|156|A|3.1"></textarea>
+        </div>
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center">Impor Sekarang</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2 class="text-headline-sm" style="margin-bottom:6px">Analisis Butir Soal</h2>
+    <p class="text-body-sm text-muted" style="margin-bottom:12px">Statistik tingkat kesulitan berdasarkan seluruh percobaan siswa pada aktivitas kuis terpilih.</p>
+    <table class="dt">
+      <thead><tr><th>Pertanyaan</th><th>Jumlah Dijawab</th><th>% Jawaban Benar</th><th>Tingkat Kesulitan</th></tr></thead>
+      <tbody id="analysis-body"></tbody>
+    </table>
   </div>
 `;
-document.getElementById("btn-add").addEventListener("click", () => lmsToast("Hubungkan tombol ini ke action 'addSoalBank' di Code.gs."));
-document.getElementById("soal-list").innerHTML = `<div class="empty">Belum ada soal tersimpan.</div>`;
+
+let kuisList = [];
+const params = new URLSearchParams(location.search);
+
+function difficultyChip(persen) {
+  if (persen >= 75) return `<span class="chip done">Mudah</span>`;
+  if (persen >= 40) return `<span class="chip warn">Sedang</span>`;
+  return `<span class="chip" style="background:var(--danger-container);color:var(--danger);border-color:transparent">Sulit</span>`;
+}
+
+async function loadKuisList() {
+  document.getElementById("sel-kuis").innerHTML = `<option>Memuat…</option>`;
+  try {
+    const detail = await LMS_API.call("getCourseDetail", {});
+    kuisList = [];
+    detail.babList.forEach(bab => bab.topikList.forEach(topik => topik.aktivitas.forEach(a => {
+      if (a.jenis === "kuis") kuisList.push({ id: a.id, label: `${bab.judul} › ${topik.judul} › ${a.judul}` });
+    })));
+    document.getElementById("sel-kuis").innerHTML = kuisList.map(k => `<option value="${k.id}">${k.label}</option>`).join("")
+      || `<option value="" disabled>Belum ada aktivitas berjenis kuis</option>`;
+    if (params.get("activityId") && kuisList.some(k => k.id === params.get("activityId"))) {
+      document.getElementById("sel-kuis").value = params.get("activityId");
+    }
+    if (kuisList.length) loadAnalysis();
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
+loadKuisList();
+
+document.getElementById("sel-kuis").addEventListener("change", loadAnalysis);
+
+async function loadAnalysis() {
+  const activityId = document.getElementById("sel-kuis").value;
+  if (!activityId) return;
+  document.getElementById("analysis-body").innerHTML = `<tr><td colspan="4"><div class="card skeleton" style="height:50px"></div></td></tr>`;
+  try {
+    const rows = await LMS_API.call("getItemAnalysis", { activityId });
+    document.getElementById("analysis-body").innerHTML = rows.map(r => `
+      <tr><td>${r.pertanyaan}</td><td>${r.totalDijawab}</td><td>${r.persenBenar}%</td><td>${difficultyChip(r.persenBenar)}</td></tr>
+    `).join("") || `<tr><td colspan="4"><div class="empty">Belum ada siswa yang mengerjakan kuis ini.</div></td></tr>`;
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
+
+document.getElementById("form-soal").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const activityId = document.getElementById("sel-kuis").value;
+  if (!activityId) return lmsToast("Pilih aktivitas kuis terlebih dahulu.", true);
+  const checked = Array.from(document.querySelectorAll('input[name="benar"]:checked')).map(c => c.value);
+  if (checked.length !== 1) return lmsToast("Tandai tepat satu jawaban sebagai kunci yang benar.", true);
+  const opsi = ["a", "b", "c", "d"].map(k => ({ id: k, teks: document.getElementById("s-opt-" + k).value, benar: checked[0] === k }));
+  try {
+    await LMS_API.call("addQuizQuestion", {
+      aktivitasId: activityId,
+      pertanyaan: document.getElementById("s-pertanyaan").value,
+      opsi, kd: document.getElementById("s-kd").value
+    });
+    lmsToast("Soal berhasil ditambahkan.");
+    e.target.reset();
+    loadAnalysis();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+document.getElementById("form-import").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const activityId = document.getElementById("sel-kuis").value;
+  if (!activityId) return lmsToast("Pilih aktivitas kuis terlebih dahulu.", true);
+  const lines = document.getElementById("import-text").value.split("\n").map(l => l.trim()).filter(Boolean);
+  const soalList = [];
+  for (const line of lines) {
+    const parts = line.split("|").map(s => s.trim());
+    if (parts.length < 6) continue;
+    const [pertanyaan, a, b, c, d, kunci, kd] = parts;
+    const kunciKey = kunci.toLowerCase();
+    soalList.push({
+      pertanyaan,
+      opsi: [{ id: "a", teks: a, benar: kunciKey === "a" }, { id: "b", teks: b, benar: kunciKey === "b" }, { id: "c", teks: c, benar: kunciKey === "c" }, { id: "d", teks: d, benar: kunciKey === "d" }],
+      kd: kd || ""
+    });
+  }
+  if (!soalList.length) return lmsToast("Tidak ada baris valid untuk diimpor.", true);
+  try {
+    const res = await LMS_API.call("importQuestionsBulk", { aktivitasId: activityId, soalList });
+    lmsToast(`${res.jumlah} soal berhasil diimpor.`);
+    e.target.reset();
+    loadAnalysis();
+  } catch (err) { lmsToast(err.message, true); }
+});
 </script>
 </body>
 </html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pengumuman Global</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["superadmin", "guru"]);</script>
+
+<div id="root"></div>
+
+<script>
+const root = lmsRenderShell({ activeId: "pengumuman", title: "Pengumuman Global" });
+
+root.innerHTML = `
+  <div class="breadcrumb">Komunikasi &nbsp;›&nbsp; <b>Pengumuman ${user.role === "superadmin" ? "Global" : "Kelas"}</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">Pengumuman ${user.role === "superadmin" ? "Global" : "Kelas"}</h1>
+      <p>Rilis informasi, dokumen, atau tautan ke seluruh sekolah maupun peran tertentu.</p>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1fr 1.4fr;gap:16px;align-items:start">
+    <div class="card">
+      <h2 class="text-headline-sm" style="margin-bottom:12px">Buat Pengumuman Baru</h2>
+      <form id="form-ann">
+        <div class="form-field"><label>Judul</label><input id="ann-judul" required></div>
+        <div class="form-field"><label>Isi Pengumuman</label><textarea id="ann-isi" rows="5" required></textarea></div>
+        <div class="form-field"><label>Target Penerima</label>
+          <select id="ann-target">
+            <option value="semua">Semua (Guru &amp; Siswa)</option>
+            <option value="guru">Hanya Guru</option>
+            <option value="siswa">Hanya Siswa</option>
+          </select>
+        </div>
+        <div class="form-field"><label>Lampiran Dokumen (opsional)</label><input type="file" id="ann-file"></div>
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center" id="ann-submit">Rilis Pengumuman</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2 class="text-headline-sm" style="margin-bottom:12px">Riwayat Pengumuman</h2>
+      <div id="ann-list" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+  </div>
+`;
+
+function targetChip(t) {
+  const map = { semua: "chip active", guru: "chip done", siswa: "chip warn" };
+  const label = { semua: "Semua", guru: "Guru", siswa: "Siswa" }[t] || t;
+  return `<span class="${map[t] || 'chip'}">${label}</span>`;
+}
+
+function renderList(items) {
+  document.getElementById("ann-list").innerHTML = items.map(a => `
+    <div class="card tight">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+        <div class="text-label-lg">${a.judul}</div>
+        ${targetChip(a.target)}
+      </div>
+      <p class="text-body-sm" style="margin:6px 0">${a.isi}</p>
+      ${a.lampiranUrl ? `<a class="btn sm" href="${a.lampiranUrl}" target="_blank" rel="noopener">📎 Lihat Lampiran</a>` : ""}
+      <div class="text-body-sm text-muted" style="margin-top:6px">Oleh ${a.authorNama} · ${new Date(a.createdAt).toLocaleString("id-ID")}</div>
+    </div>
+  `).join("") || `<div class="empty">Belum ada pengumuman yang dirilis.</div>`;
+}
+
+async function load() {
+  document.getElementById("ann-list").innerHTML = `<div class="card skeleton" style="height:80px"></div>`;
+  try {
+    const items = await LMS_API.call("getAnnouncements", {});
+    renderList(items);
+  } catch (err) {
+    lmsToast(err.message, true);
+    renderList([]);
+  }
+}
+load();
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById("form-ann").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("ann-submit");
+  btn.disabled = true; btn.textContent = "Memproses…";
+  try {
+    let lampiranUrl = "";
+    const file = document.getElementById("ann-file").files[0];
+    if (file) {
+      const base64 = await fileToBase64(file);
+      const uploaded = await LMS_API.call("uploadFile", { fileBase64: base64, fileName: file.name, mimeType: file.type });
+      lampiranUrl = uploaded.url;
+    }
+    await LMS_API.call("createAnnouncement", {
+      judul: document.getElementById("ann-judul").value,
+      isi: document.getElementById("ann-isi").value,
+      target: document.getElementById("ann-target").value,
+      lampiranUrl
+    });
+    lmsToast("Pengumuman berhasil dirilis.");
+    e.target.reset();
+    load();
+  } catch (err) {
+    lmsToast(err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Rilis Pengumuman";
+  }
+});
+</script>
+</body>
+</html>

@@ -23,7 +23,8 @@
       <div class="form-field"><label>Peran</label>
         <select id="u-role"><option value="guru">Guru</option><option value="siswa">Siswa</option><option value="superadmin">Admin</option></select>
       </div>
-      <div class="form-field"><label>Kelas / Bagian</label><input id="u-kelas" placeholder="mis. Matematika 8A"></div>
+      <div class="form-field"><label>NIS (khusus siswa)</label><input id="u-nis" placeholder="mis. 240803"></div>
+      <div class="form-field"><label>Kelas / Bagian</label><input id="u-kelas" placeholder="mis. 8A"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
         <button type="button" class="btn" id="cancel-add-user">Batal</button>
         <button type="submit" class="btn primary">Simpan</button>
@@ -44,17 +45,19 @@ root.innerHTML = `
     </div>
     <div class="head-actions">
       <button class="btn primary" id="btn-add-user">+ Tambah Admin/Guru</button>
-      <button class="btn" id="btn-security">Kebijakan Keamanan</button>
-      <button class="btn" id="btn-import">Impor Pengguna (CSV)</button>
+      <a class="btn" href="log-sistem.html">Log Sistem &amp; Keamanan</a>
+      <a class="btn" href="kelola-pengguna.html">Kelola Pengguna &amp; Impor</a>
+      <a class="btn" href="kelola-kelas.html">Kelola Kelas</a>
+      <a class="btn" href="pengumuman.html">Pengumuman</a>
     </div>
   </div>
 
-  <div class="grid grid-3" style="margin-bottom:16px" id="stat-tiles"></div>
+  <div class="grid grid-4" style="margin-bottom:16px" id="stat-tiles"></div>
 
   <div class="card" style="margin-bottom:16px">
     <h2 class="text-headline-sm" style="margin-bottom:10px">Pengguna &amp; Peran</h2>
     <table class="dt">
-      <thead><tr><th>Nama</th><th>Peran</th><th>Kelas/Bagian</th><th>Status</th></tr></thead>
+      <thead><tr><th>Nama</th><th>Peran</th><th>NIS</th><th>Kelas/Bagian</th><th>Status</th></tr></thead>
       <tbody id="user-table"></tbody>
     </table>
   </div>
@@ -65,12 +68,21 @@ root.innerHTML = `
   </div>
 `;
 
+// Catatan: sejak backend direvisi, getSuperadminOverview TIDAK LAGI mengirim
+// daftar pengguna lengkap (dipisah ke action getUsersList) dan field statistik
+// storage/kuota (yang lama tidak pernah dihitung dari data nyata) sudah dihapus,
+// diganti statistik nyata: totalSiswa, totalGuru, totalRombelAktif, totalPenggunaAktif.
+const statMeta = [
+  { key: "totalSiswa", label: "Total Siswa Aktif", ic: "🎓" },
+  { key: "totalGuru", label: "Total Guru Aktif", ic: "👩‍🏫" },
+  { key: "totalRombelAktif", label: "Rombongan Belajar Aktif", ic: "🏫" },
+  { key: "totalPenggunaAktif", label: "Total Pengguna Aktif", ic: "👥" },
+];
+
 function renderStats(s) {
-  document.getElementById("stat-tiles").innerHTML = `
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.totalPengguna}</div><div class="label">Total Pengguna Aktif</div></div><div class="ic mint">👥</div></div></div>
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.storagePersen}%</div><div class="label">Pemakaian Penyimpanan (Drive)</div></div><div class="ic mint">💾</div></div></div>
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.kuotaGasPersen}%</div><div class="label">Kuota Backend (Apps Script)</div></div><div class="ic warn">⚙</div></div></div>
-  `;
+  document.getElementById("stat-tiles").innerHTML = statMeta.map(m => `
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s[m.key] ?? "–"}</div><div class="label">${m.label}</div></div><div class="ic mint">${m.ic}</div></div></div>
+  `).join("");
 }
 
 function renderUsers(users) {
@@ -78,10 +90,11 @@ function renderUsers(users) {
     <tr>
       <td style="display:flex;gap:10px;align-items:center"><div class="avatar-sm">${lmsInitials(u.nama)}</div>${u.nama}</td>
       <td>${u.role}</td>
+      <td>${u.nis || "—"}</td>
       <td>${u.kelas || "—"}</td>
-      <td><span class="chip done">${u.status}</span></td>
+      <td><span class="chip ${u.status === 'aktif' ? 'done' : 'locked'}">${u.status}</span></td>
     </tr>
-  `).join("") || `<tr><td colspan="4"><div class="empty">Belum ada pengguna lain.</div></td></tr>`;
+  `).join("") || `<tr><td colspan="5"><div class="empty">Belum ada pengguna lain.</div></td></tr>`;
 }
 
 function renderAudit(logs) {
@@ -93,15 +106,19 @@ function renderAudit(logs) {
 }
 
 async function load() {
-  document.getElementById("stat-tiles").innerHTML = Array(3).fill('<div class="card skeleton" style="height:88px"></div>').join("");
+  document.getElementById("stat-tiles").innerHTML = Array(4).fill('<div class="card skeleton" style="height:88px"></div>').join("");
   try {
-    const data = await LMS_API.call("getSuperadminOverview", {});
-    renderStats(data.stats);
-    renderUsers(data.users);
-    renderAudit(data.auditLog);
+    // Dua panggilan terpisah: overview (statistik + log audit) dan daftar pengguna lengkap.
+    const [overview, users] = await Promise.all([
+      LMS_API.call("getSuperadminOverview", {}),
+      LMS_API.call("getUsersList", {})
+    ]);
+    renderStats(overview.stats);
+    renderAudit(overview.auditLog);
+    renderUsers(users);
   } catch (err) {
     lmsToast(err.message, true);
-    renderStats({ totalPengguna: "–", storagePersen: 0, kuotaGasPersen: 0 });
+    renderStats({});
     renderUsers([]); renderAudit([]);
   }
 }
@@ -110,9 +127,6 @@ load();
 const modalBg = document.getElementById("modal-bg");
 document.getElementById("btn-add-user").addEventListener("click", () => modalBg.style.display = "flex");
 document.getElementById("cancel-add-user").addEventListener("click", () => modalBg.style.display = "none");
-document.getElementById("btn-security").addEventListener("click", () => lmsToast("Halaman kebijakan keamanan dapat dikembangkan di pengaturan.html."));
-document.getElementById("btn-import").addEventListener("click", () => lmsToast("Impor CSV: kirim isi file ke action 'importUsersCsv' di backend."));
-
 document.getElementById("add-user-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
@@ -120,6 +134,7 @@ document.getElementById("add-user-form").addEventListener("submit", async (e) =>
       nama: document.getElementById("u-name").value,
       email: document.getElementById("u-email").value,
       role: document.getElementById("u-role").value,
+      nis: document.getElementById("u-nis").value,
       kelas: document.getElementById("u-kelas").value
     });
     lmsToast("Pengguna berhasil ditambahkan.");

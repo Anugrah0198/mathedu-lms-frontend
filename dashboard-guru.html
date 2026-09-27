@@ -6,17 +6,16 @@
 <title>Dashboard Guru</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .topic-row{border:1px solid var(--border);border-radius:var(--r-md);padding:12px 14px;margin-bottom:10px}
+  .topic-row .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:8px}
+</style>
 </head>
 <body>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/shell.js"></script>
-<script>
-  const user = LMS_AUTH.requireRole(["guru"]);
-</script>
-
-<script type="module">
-</script>
+<script>const user = LMS_AUTH.requireRole(["guru", "superadmin"]);</script>
 
 <div id="root"></div>
 
@@ -24,107 +23,115 @@
 const root = lmsRenderShell({ activeId: "dashboard-guru", title: "Dashboard Guru" });
 
 root.innerHTML = `
-  <div class="breadcrumb">Beranda &nbsp;›&nbsp; <b>Dashboard Guru</b> &nbsp;›&nbsp; Tinjauan Akademik</div>
+  <div class="breadcrumb">Panel Guru &nbsp;›&nbsp; <b>Dashboard</b></div>
   <div class="page-head">
     <div class="title">
-      <h1 class="text-headline-lg">Ringkasan Aktivitas Guru</h1>
+      <h1 class="text-headline-lg">Dashboard Guru — Kelas ${user.kelas || "-"}</h1>
+      <p>Ringkasan progres belajar, tugas yang perlu dinilai, dan siswa yang butuh perhatian.</p>
     </div>
     <div class="head-actions">
-      <a class="btn primary" href="kursus-topik.html">+ Tambah Materi</a>
-      <a class="btn" href="bank-soal.html">Buat Tugas Baru</a>
-      <a class="btn" href="bank-soal.html">Rancang Kuis</a>
-      <a class="btn" href="buku-nilai.html">Rekap Nilai</a>
+      <a class="btn primary" href="kursus-topik.html">+ Tambah Bab Baru</a>
+      <a class="btn" href="koreksi-penilaian.html">Koreksi Tugas Masuk</a>
+      <a class="btn" href="buku-nilai.html">Buku Nilai</a>
     </div>
   </div>
 
-  <div class="grid grid-4" id="stat-tiles" style="margin-bottom:16px"></div>
+  <div class="grid grid-4" style="margin-bottom:16px" id="stat-tiles"></div>
 
-  <div class="grid" style="grid-template-columns:2fr 1fr;gap:16px;align-items:start">
-    <div style="display:flex;flex-direction:column;gap:16px">
-      <div class="card">
-        <div class="text-label-sm text-muted">KURIKULUM FASE D</div>
-        <h2 class="text-headline-sm" style="margin:4px 0 12px">Progres Pembelajaran per Topik</h2>
-        <div id="topic-progress" style="display:flex;flex-direction:column;gap:16px"></div>
-      </div>
+  <div class="grid" style="grid-template-columns:1.4fr 1fr;gap:16px;align-items:start">
+    <div class="card">
+      <h2 class="text-headline-sm" style="margin-bottom:10px">Progres Modul per Bab</h2>
+      <div id="topic-list"></div>
     </div>
 
     <div style="display:flex;flex-direction:column;gap:16px">
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-          <h2 class="text-headline-sm">Pendampingan Khusus</h2>
-          <span class="chip warn" id="remedial-count">0 Perlu Tinjauan</span>
-        </div>
-        <p class="text-body-sm text-muted" style="margin-bottom:10px">Siswa dengan keterlambatan tugas berturut-turut atau nilai kuis di bawah KKM.</p>
+        <h2 class="text-headline-sm" style="margin-bottom:10px">Siswa Perlu Perhatian</h2>
         <div id="remedial-list" style="display:flex;flex-direction:column;gap:10px"></div>
       </div>
     </div>
   </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2 class="text-headline-sm" style="margin-bottom:10px">Aktivitas Siswa Terbaru</h2>
+    <table class="dt">
+      <thead><tr><th>Siswa</th><th>Aktivitas</th><th>Status</th><th>Waktu</th></tr></thead>
+      <tbody id="log-body"></tbody>
+    </table>
+  </div>
 `;
 
 const statMeta = [
-  { key: "tugasPerluDinilai", label: "Tugas Perlu Dinilai", suffix: "berkas", ic: "📋", cls: "mint" },
-  { key: "tenggatMendekat", label: "Tenggat Mendekat", suffix: "evaluasi", ic: "🗓", cls: "warn" },
-  { key: "rataNilaiKelas", label: "Rata-rata Nilai Kelas", suffix: "/ 100", ic: "📈", cls: "mint" },
-  { key: "siswaAktif", label: "Siswa Aktif", suffix: "siswa", ic: "🎓", cls: "mint" },
+  { key: "tugasPerluDinilai", label: "Tugas Perlu Dinilai", ic: "📥" },
+  { key: "tenggatMendekat", label: "Kuis Aktif Dipantau", ic: "⏱" },
+  { key: "rataNilaiKelas", label: "Rata-rata Nilai Kelas", ic: "📈" },
+  { key: "siswaAktif", label: "Siswa Aktif", ic: "🎓" }
 ];
 
-function renderStatTiles(stats) {
+function renderStats(s) {
   document.getElementById("stat-tiles").innerHTML = statMeta.map(m => `
-    <div class="card stat-tile">
-      <div class="top">
-        <div>
-          <div class="text-metric">${stats[m.key] ?? "–"}</div>
-          <div class="label">${m.suffix} · ${m.label}</div>
-        </div>
-        <div class="ic ${m.cls}">${m.ic}</div>
-      </div>
-    </div>
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s[m.key] ?? "–"}</div><div class="label">${m.label}</div></div><div class="ic mint">${m.ic}</div></div></div>
   `).join("");
 }
 
-function renderTopicProgress(topics) {
-  document.getElementById("topic-progress").innerHTML = topics.map(t => `
-    <div>
-      <div style="display:flex;justify-content:space-between;gap:8px">
-        <div class="text-label-lg">${t.nama}</div>
-        <div class="text-label-lg">${t.persen}%</div>
+function statusChip(status) {
+  const map = { selesai: "chip done", dilihat: "chip active", "menunggu-penilaian": "chip warn", diulang: "chip warn" };
+  return `<span class="${map[status] || 'chip'}">${status}</span>`;
+}
+
+function renderTopics(topics) {
+  document.getElementById("topic-list").innerHTML = topics.map(t => `
+    <div class="topic-row">
+      <div class="top">
+        <div>
+          <div class="text-label-lg">${t.nama}</div>
+          <div class="text-body-sm text-muted">${t.catatan}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="text-headline-sm">${t.persen}%</div>
+          <div class="text-body-sm text-muted">${t.modulSelesai}/${t.totalModul} selesai</div>
+        </div>
       </div>
-      <div class="progress ${t.persen < 50 ? "warn" : ""}" style="margin:6px 0">
-        <span style="width:${t.persen}%"></span>
-      </div>
-      <div class="text-body-sm text-muted">${t.modulSelesai}/${t.totalModul} modul selesai · ${t.catatan}</div>
+      <div class="progress"><span style="width:${t.persen}%"></span></div>
     </div>
-  `).join("") || `<div class="empty">Belum ada data topik. Tambahkan materi di menu Kursus &amp; Topik.</div>`;
+  `).join("") || `<div class="empty">Belum ada bab yang dibuat. Buka "Kursus & Topik" untuk mulai menyusun modul.</div>`;
 }
 
 function renderRemedial(list) {
-  document.getElementById("remedial-count").textContent = `${list.length} Perlu Tinjauan`;
-  document.getElementById("remedial-list").innerHTML = list.map(s => `
-    <div class="card tight" style="display:flex;gap:10px;align-items:flex-start">
-      <div class="avatar-sm">${lmsInitials(s.nama)}</div>
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;justify-content:space-between;gap:8px">
-          <div class="text-label-lg">${s.nama}</div>
-          <span class="chip warn">${s.aksi}</span>
-        </div>
-        <div class="text-body-sm text-muted">${s.kelas} · ${s.catatan}</div>
+  document.getElementById("remedial-list").innerHTML = list.map(r => `
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div class="text-label-lg">${r.nama}</div>
+        <div class="text-body-sm text-muted">${r.catatan}</div>
       </div>
+      <span class="chip warn">${r.aksi}</span>
     </div>
-  `).join("") || `<div class="empty">Tidak ada siswa yang butuh pendampingan saat ini 🎉</div>`;
+  `).join("") || `<div class="empty">Tidak ada siswa yang butuh perhatian khusus saat ini. 🎉</div>`;
+}
+
+function renderLog(logs) {
+  document.getElementById("log-body").innerHTML = logs.map(l => `
+    <tr>
+      <td style="display:flex;gap:10px;align-items:center"><div class="avatar-sm">${lmsInitials(l.siswa)}</div>${l.siswa}</td>
+      <td>${l.aktivitas}</td>
+      <td>${statusChip(l.status)}</td>
+      <td class="text-muted">${new Date(l.waktu).toLocaleString("id-ID")}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="4"><div class="empty">Belum ada aktivitas siswa tercatat.</div></td></tr>`;
 }
 
 async function load() {
-  root.querySelector("#stat-tiles").innerHTML = Array(4).fill('<div class="card skeleton" style="height:88px"></div>').join("");
+  document.getElementById("stat-tiles").innerHTML = Array(4).fill('<div class="card skeleton" style="height:88px"></div>').join("");
+  document.getElementById("topic-list").innerHTML = `<div class="skeleton" style="height:120px"></div>`;
   try {
-    const data = await LMS_API.call("getDashboardGuru", {});
-    renderStatTiles(data.stats);
-    renderTopicProgress(data.topics);
-    renderRemedial(data.remedial);
+    const d = await LMS_API.call("getDashboardGuru", {});
+    renderStats(d.stats);
+    renderTopics(d.topics);
+    renderRemedial(d.remedial);
+    renderLog(d.logTerkini);
   } catch (err) {
     lmsToast(err.message, true);
-    renderStatTiles({});
-    renderTopicProgress([]);
-    renderRemedial([]);
+    renderStats({}); renderTopics([]); renderRemedial([]); renderLog([]);
   }
 }
 load();

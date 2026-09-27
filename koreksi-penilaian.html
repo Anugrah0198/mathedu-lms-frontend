@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Koreksi & Penilaian</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .modal-bg{position:fixed;inset:0;background:rgba(11,29,44,.5);display:none;align-items:center;justify-content:center;z-index:40}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--surface);border-radius:var(--r-lg);padding:22px;width:100%;max-width:440px;box-shadow:var(--shadow-3)}
+</style>
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["guru", "superadmin"]);</script>
+
+<div id="root"></div>
+
+<div class="modal-bg" id="modal-grade">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:6px">Beri Nilai Tugas</h3>
+    <p class="text-body-sm text-muted" style="margin-bottom:12px"><b id="grade-siswa"></b> — <span id="grade-aktivitas"></span></p>
+    <form id="form-grade">
+      <input type="hidden" id="grade-id">
+      <div class="form-field"><label>Nilai (0–100)</label><input id="grade-nilai" type="number" min="0" max="100" required></div>
+      <div class="form-field"><label>Umpan Balik (opsional)</label><textarea id="grade-feedback" rows="3"></textarea></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" id="grade-cancel">Batal</button>
+        <button type="submit" class="btn primary">Simpan Nilai</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const root = lmsRenderShell({ activeId: "koreksi-penilaian", title: "Koreksi & Penilaian" });
+
+root.innerHTML = `
+  <div class="breadcrumb">Panel Guru &nbsp;›&nbsp; <b>Koreksi &amp; Penilaian</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">Koreksi &amp; Penilaian</h1>
+      <p>Daftar tugas siswa yang sudah dikumpulkan dan menunggu penilaian Anda.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <table class="dt">
+      <thead><tr><th>Siswa</th><th>Aktivitas</th><th>Catatan Siswa</th><th>Dikumpulkan</th><th>Berkas</th><th>Aksi</th></tr></thead>
+      <tbody id="queue-body"></tbody>
+    </table>
+  </div>
+`;
+
+let queue = [];
+
+function renderQueue() {
+  document.getElementById("queue-body").innerHTML = queue.map(s => `
+    <tr>
+      <td style="display:flex;gap:10px;align-items:center"><div class="avatar-sm">${lmsInitials(s.siswaNama)}</div>${s.siswaNama}</td>
+      <td>${s.aktivitasJudul}</td>
+      <td class="text-muted">${s.catatan || "—"}</td>
+      <td class="text-muted">${new Date(s.submittedAt).toLocaleString("id-ID")}</td>
+      <td><a class="btn sm" href="${s.fileUrl}" target="_blank" rel="noopener">📎 Lihat</a></td>
+      <td><button class="btn sm primary" data-grade="${s.id}" data-siswa="${s.siswaNama}" data-akt="${s.aktivitasJudul}">Beri Nilai</button></td>
+    </tr>
+  `).join("") || `<tr><td colspan="6"><div class="empty">Tidak ada tugas yang menunggu penilaian. Semua sudah dikoreksi! 🎉</div></td></tr>`;
+
+  document.querySelectorAll("[data-grade]").forEach(b => b.addEventListener("click", () => openGrade(b.dataset.grade, b.dataset.siswa, b.dataset.akt)));
+}
+
+async function load() {
+  document.getElementById("queue-body").innerHTML = `<tr><td colspan="6"><div class="card skeleton" style="height:60px"></div></td></tr>`;
+  try {
+    queue = await LMS_API.call("getSubmissionQueue", {});
+    renderQueue();
+  } catch (err) {
+    lmsToast(err.message, true);
+    queue = []; renderQueue();
+  }
+}
+load();
+
+function openGrade(id, siswa, akt) {
+  document.getElementById("grade-id").value = id;
+  document.getElementById("grade-siswa").textContent = siswa;
+  document.getElementById("grade-aktivitas").textContent = akt;
+  document.getElementById("form-grade").reset();
+  document.getElementById("modal-grade").classList.add("open");
+}
+document.getElementById("grade-cancel").addEventListener("click", () => document.getElementById("modal-grade").classList.remove("open"));
+
+document.getElementById("form-grade").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await LMS_API.call("gradeSubmission", {
+      submissionId: document.getElementById("grade-id").value,
+      nilai: Number(document.getElementById("grade-nilai").value),
+      feedback: document.getElementById("grade-feedback").value
+    });
+    lmsToast("Nilai berhasil disimpan.");
+    document.getElementById("modal-grade").classList.remove("open");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+</script>
+</body>
+</html>

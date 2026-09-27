@@ -6,30 +6,138 @@
 <title>Laporan & Analitik</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .tabs-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tabs-row button{border:1px solid var(--border-strong);background:var(--surface);border-radius:var(--r-full);
+    padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--text-soft)}
+  .tabs-row button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+  .journal-item{padding:10px 0;border-bottom:1px solid var(--border)}
+</style>
 </head>
 <body>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/shell.js"></script>
-<script>const user = LMS_AUTH.requireRole(["guru"]);</script>
+<script>const user = LMS_AUTH.requireRole(["guru", "superadmin"]);</script>
+
 <div id="root"></div>
+
 <script>
 const root = lmsRenderShell({ activeId: "laporan", title: "Laporan & Analitik" });
+
 root.innerHTML = `
-  <div class="breadcrumb">Akademik &nbsp;›&nbsp; <b>Laporan &amp; Analitik</b></div>
+  <div class="breadcrumb">Panel Guru &nbsp;›&nbsp; <b>Laporan &amp; Analitik</b></div>
   <div class="page-head">
     <div class="title">
       <h1 class="text-headline-lg">Laporan &amp; Analitik</h1>
-      <p>Ringkasan performa kelas lintas waktu — sambungkan ke data Buku Nilai dan Jalur Belajar.</p>
+      <p>Pantau presensi harian dan catat perkembangan setiap siswa di kelas Anda.</p>
     </div>
   </div>
-  <div class="card">
-    <p class="text-body-sm text-muted">
-      Kerangka halaman. Tambahkan action <code>getLaporanAnalitik</code> di <code>Code.gs</code> yang mengagregasi
-      data dari sheet Grades &amp; QuizAttempts, lalu render dengan chart (mis. Chart.js) di sini.
+
+  <div class="tabs-row" id="tabs">
+    <button class="active" data-tab="presensi">Presensi Kehadiran</button>
+    <button data-tab="jurnal">Jurnal Catatan Siswa</button>
+  </div>
+
+  <div class="card tab-panel active" id="panel-presensi">
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:14px;flex-wrap:wrap">
+      <div class="form-field" style="margin-bottom:0"><label>Tanggal</label><input type="date" id="presensi-tanggal"></div>
+      <button class="btn primary" id="btn-load-presensi">Tampilkan</button>
+    </div>
+    <p class="text-body-sm text-muted" style="margin-bottom:12px">
+      Status kehadiran dihitung otomatis dari aktivitas siswa di LMS pada tanggal terpilih (bukan presensi manual).
     </p>
+    <table class="dt">
+      <thead><tr><th>Nama Siswa</th><th>Status</th></tr></thead>
+      <tbody id="presensi-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card tab-panel" id="panel-jurnal">
+    <div class="grid" style="grid-template-columns:1fr 1.4fr;gap:16px;align-items:start">
+      <div>
+        <div class="form-field"><label>Pilih Siswa</label><select id="jurnal-siswa"></select></div>
+        <form id="form-jurnal">
+          <div class="form-field"><label>Catatan Baru</label><textarea id="jurnal-catatan" rows="4" placeholder="Perkembangan, catatan perilaku, atau rekomendasi untuk siswa ini…" required></textarea></div>
+          <button type="submit" class="btn primary" style="width:100%;justify-content:center">+ Tambah Catatan</button>
+        </form>
+      </div>
+      <div>
+        <h3 class="text-headline-sm" style="margin-bottom:10px">Riwayat Catatan</h3>
+        <div id="jurnal-list"></div>
+      </div>
+    </div>
   </div>
 `;
+
+document.querySelectorAll("#tabs button").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+}));
+
+// ---------- Presensi ----------
+document.getElementById("presensi-tanggal").value = new Date().toISOString().slice(0, 10);
+
+async function loadPresensi() {
+  const tanggal = document.getElementById("presensi-tanggal").value;
+  document.getElementById("presensi-body").innerHTML = `<tr><td colspan="2"><div class="card skeleton" style="height:60px"></div></td></tr>`;
+  try {
+    const rows = await LMS_API.call("getAttendanceSummary", { tanggal });
+    document.getElementById("presensi-body").innerHTML = rows.map(r => `
+      <tr>
+        <td style="display:flex;gap:10px;align-items:center"><div class="avatar-sm">${lmsInitials(r.nama)}</div>${r.nama}</td>
+        <td><span class="chip ${r.hadir ? 'done' : 'locked'}">${r.hadir ? 'Aktif di LMS' : 'Tidak Terdeteksi'}</span></td>
+      </tr>
+    `).join("") || `<tr><td colspan="2"><div class="empty">Belum ada siswa di kelas Anda.</div></td></tr>`;
+  } catch (err) { lmsToast(err.message, true); }
+}
+document.getElementById("btn-load-presensi").addEventListener("click", loadPresensi);
+loadPresensi();
+
+// ---------- Jurnal ----------
+let siswaList = [];
+async function loadSiswaSelect() {
+  try {
+    siswaList = await LMS_API.call("getUsersList", { role: "siswa" });
+    document.getElementById("jurnal-siswa").innerHTML = siswaList.map(s => `<option value="${s.id}">${s.nama}</option>`).join("")
+      || `<option value="" disabled>Belum ada siswa</option>`;
+    if (siswaList.length) loadJurnal();
+  } catch (err) { lmsToast(err.message, true); }
+}
+loadSiswaSelect();
+
+document.getElementById("jurnal-siswa").addEventListener("change", loadJurnal);
+
+async function loadJurnal() {
+  const siswaId = document.getElementById("jurnal-siswa").value;
+  if (!siswaId) return;
+  document.getElementById("jurnal-list").innerHTML = `<div class="card skeleton" style="height:80px"></div>`;
+  try {
+    const entries = await LMS_API.call("getJournal", { siswaId });
+    document.getElementById("jurnal-list").innerHTML = entries.map(e => `
+      <div class="journal-item">
+        <div class="text-body-md">${e.catatan}</div>
+        <div class="text-body-sm text-muted" style="margin-top:4px">${new Date(e.createdAt).toLocaleString("id-ID")}</div>
+      </div>
+    `).join("") || `<div class="empty">Belum ada catatan untuk siswa ini.</div>`;
+  } catch (err) { lmsToast(err.message, true); }
+}
+
+document.getElementById("form-jurnal").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const siswaId = document.getElementById("jurnal-siswa").value;
+  if (!siswaId) return lmsToast("Pilih siswa terlebih dahulu.", true);
+  try {
+    await LMS_API.call("addJournalEntry", { siswaId, catatan: document.getElementById("jurnal-catatan").value });
+    lmsToast("Catatan berhasil ditambahkan.");
+    document.getElementById("jurnal-catatan").value = "";
+    loadJurnal();
+  } catch (err) { lmsToast(err.message, true); }
+});
 </script>
 </body>
 </html>

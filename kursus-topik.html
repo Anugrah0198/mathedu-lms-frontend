@@ -7,37 +7,135 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/tokens.css">
 <style>
-  .bab-card{border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:12px;overflow:hidden}
-  .bab-head{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--surface);cursor:pointer}
-  .bab-head .handle{color:var(--text-soft)}
-  .bab-body{padding:0 16px 16px;background:var(--surface-low);display:none}
-  .bab-body.open{display:block}
-  .topik-row{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
-    padding:10px 12px;margin-top:8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
-  .aktivitas-row{display:flex;justify-content:space-between;align-items:center;gap:8px;
-    padding:8px 10px;border-radius:var(--r-sm);font-size:12.5px}
-  .aktivitas-row:hover{background:var(--surface-low)}
-  .modal-bg{position:fixed;inset:0;background:rgba(11,29,44,.5);display:none;align-items:center;justify-content:center;z-index:40}
+  .modal-bg{position:fixed;inset:0;background:rgba(11,29,44,.5);display:none;align-items:center;justify-content:center;z-index:40;overflow-y:auto;padding:30px 12px}
   .modal-bg.open{display:flex}
-  .modal{background:var(--surface);border-radius:var(--r-lg);padding:22px;width:100%;max-width:420px;box-shadow:var(--shadow-3)}
+  .modal{background:var(--surface);border-radius:var(--r-lg);padding:22px;width:100%;max-width:520px;box-shadow:var(--shadow-3);margin:auto}
+  .bab-card{margin-bottom:14px}
+  .bab-head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .topik-block{border-top:1px solid var(--border);padding-top:10px;margin-top:10px}
+  .topik-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .akt-row{border:1px solid var(--border);border-radius:var(--r-md);margin-top:8px;overflow:hidden}
+  .akt-row-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;cursor:pointer}
+  .akt-row-head:hover{background:var(--surface-low)}
+  .akt-row-head .grow{flex:1;min-width:120px}
+  .akt-content-panel{display:none;padding:14px;border-top:1px solid var(--border);background:var(--surface-low)}
+  .akt-content-panel.open{display:block}
+  .link-row{display:flex;gap:6px;margin-bottom:6px}
+  .link-row input{flex:1}
+  .row-actions{display:flex;gap:6px;flex-wrap:wrap}
 </style>
 </head>
 <body>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/shell.js"></script>
-<script>const user = LMS_AUTH.requireRole(["guru"]);</script>
+<script>const user = LMS_AUTH.requireRole(["guru", "superadmin"]);</script>
 
 <div id="root"></div>
-<div class="modal-bg" id="modal-bg">
+
+<!-- Modal: Tambah / Edit Bab -->
+<div class="modal-bg" id="modal-bab">
   <div class="modal">
-    <h3 class="text-headline-sm" id="modal-title" style="margin-bottom:14px">Tambah Bab Baru</h3>
-    <form id="modal-form">
-      <div class="form-field"><label id="modal-label-1">Judul Bab</label><input id="modal-input-1" required></div>
-      <div class="form-field" id="modal-field-2" style="display:none"><label>Deskripsi singkat</label><textarea id="modal-input-2" rows="2"></textarea></div>
+    <h3 class="text-headline-sm" style="margin-bottom:14px" id="modal-bab-title">Tambah Bab Baru</h3>
+    <form id="form-bab">
+      <input type="hidden" id="bab-id">
+      <div class="form-field"><label>Judul Bab</label><input id="bab-judul" required></div>
+      <div class="form-field"><label>Deskripsi</label><textarea id="bab-deskripsi" rows="2"></textarea></div>
+      <div class="form-field" id="bab-status-field" style="display:none">
+        <label>Status</label>
+        <select id="bab-status"><option value="draft">Draf</option><option value="aktif">Aktif / Dipublikasikan</option></select>
+      </div>
+      <div class="form-field" id="bab-kriteria-field" style="display:none">
+        <label>Kriteria Kelulusan Bab</label>
+        <select id="bab-kriteria"><option value="semua">Selesaikan Semua Item</option><option value="salah-satu">Salah Satu Item</option></select>
+      </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-        <button type="button" class="btn" id="modal-cancel">Batal</button>
+        <button type="button" class="btn" data-close="modal-bab">Batal</button>
         <button type="submit" class="btn primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Tambah Topik -->
+<div class="modal-bg" id="modal-topik">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:14px">Tambah Topik Baru</h3>
+    <form id="form-topik">
+      <input type="hidden" id="topik-bab-id">
+      <div class="form-field"><label>Judul Topik</label><input id="topik-judul" required></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-topik">Batal</button>
+        <button type="submit" class="btn primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Tambah Aktivitas -->
+<div class="modal-bg" id="modal-akt">
+  <div class="modal" style="max-width:560px">
+    <h3 class="text-headline-sm" style="margin-bottom:14px">Tambah Aktivitas Belajar</h3>
+    <form id="form-akt">
+      <input type="hidden" id="akt-topik-id">
+      <div class="form-field"><label>Judul Aktivitas</label><input id="akt-judul" required></div>
+      <div class="form-field"><label>Jenis</label>
+        <select id="akt-jenis">
+          <option value="materi">Materi / Halaman Teori</option>
+          <option value="kuis">Kuis</option>
+          <option value="tugas">Tugas (Upload Berkas)</option>
+          <option value="forum">Forum Diskusi</option>
+        </select>
+      </div>
+      <div class="form-field"><label><input type="checkbox" id="akt-wajib" checked style="width:auto;margin-right:6px">Aktivitas wajib diselesaikan</label></div>
+      <div class="form-field" id="akt-kkm-field"><label>KKM (Nilai Minimum Lulus)</label><input id="akt-kkm" type="number" value="70"></div>
+      <div class="form-field"><label>Durasi (menit, opsional)</label><input id="akt-durasi" type="number" value="0"></div>
+      <div class="form-field" id="akt-attempts-field"><label>Maks. Percobaan (0 = tanpa batas)</label><input id="akt-attempts" type="number" value="0"></div>
+      <div class="form-field" id="akt-acak-field"><label><input type="checkbox" id="akt-acak" style="width:auto;margin-right:6px">Acak urutan soal</label></div>
+      <div class="form-field"><label>Label Syarat (mis. "Viewed", "Submitted")</label><input id="akt-syarat"></div>
+      <div class="form-field" id="akt-konten-field"><label>Konten (HTML sederhana diperbolehkan)</label><textarea id="akt-konten" rows="4"></textarea></div>
+      <div class="form-field"><label>Lampiran (PDF/Gambar, opsional)</label><input type="file" id="akt-lampiran"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-akt">Batal</button>
+        <button type="submit" class="btn primary" id="akt-submit">Simpan Aktivitas</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Edit Metadata Aktivitas -->
+<div class="modal-bg" id="modal-edit-meta">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:6px">Edit Aktivitas</h3>
+    <p class="text-body-sm text-muted" style="margin-bottom:12px">Untuk mengubah konten, lampiran, atau soal, klik baris aktivitas pada daftar untuk membuka panel konten.</p>
+    <form id="form-edit-meta">
+      <input type="hidden" id="em-id">
+      <div class="form-field"><label>Judul Aktivitas</label><input id="em-judul" required></div>
+      <div class="form-field"><label><input type="checkbox" id="em-wajib" style="width:auto;margin-right:6px">Aktivitas wajib diselesaikan</label></div>
+      <div class="form-field"><label>KKM</label><input id="em-kkm" type="number"></div>
+      <div class="form-field"><label>Prasyarat (harus selesai dahulu)</label><select id="em-prasyarat"><option value="">— Tidak ada (item pembuka) —</option></select></div>
+      <div class="form-field"><label>Label Syarat</label><input id="em-syarat"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-edit-meta">Batal</button>
+        <button type="submit" class="btn primary">Simpan Perubahan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Jadwal Kelas -->
+<div class="modal-bg" id="modal-jadwal">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:6px">Atur Jadwal Rilis & Tenggat</h3>
+    <p class="text-body-sm text-muted" style="margin-bottom:12px">Bab: <b id="jadwal-bab-nama"></b></p>
+    <form id="form-jadwal">
+      <input type="hidden" id="jadwal-bab-id">
+      <div class="form-field"><label>Kelas</label><select id="jadwal-kelas" required></select></div>
+      <div class="form-field"><label>Buka Pada</label><input id="jadwal-buka" type="datetime-local" required></div>
+      <div class="form-field"><label>Tenggat</label><input id="jadwal-tenggat" type="datetime-local" required></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-jadwal">Batal</button>
+        <button type="submit" class="btn primary">Simpan Jadwal</button>
       </div>
     </form>
   </div>
@@ -46,151 +144,439 @@
 <script>
 const root = lmsRenderShell({ activeId: "kursus-topik", title: "Kursus & Topik" });
 
-let courseState = { babList: [] };
-let currentCourseId = null;
-
 root.innerHTML = `
-  <div class="breadcrumb">Kurikulum &nbsp;›&nbsp; <b>Manajemen Kursus</b></div>
+  <div class="breadcrumb">Panel Guru &nbsp;›&nbsp; <b>Kursus &amp; Topik</b></div>
   <div class="page-head">
     <div class="title">
-      <h1 class="text-headline-lg" id="course-title">Manajemen Kursus</h1>
-      <p id="course-sub">Susun Bab → Topik → Aktivitas untuk kelas Anda.</p>
+      <h1 class="text-headline-lg" id="course-title">Kelola Modul Pembelajaran</h1>
+      <p id="course-desc">Susun bab, topik, dan aktivitas belajar berurutan untuk kelas Anda.</p>
     </div>
     <div class="head-actions">
-      <button class="btn" id="btn-add-topik">+ Tambah Topik</button>
+      <button class="btn" id="btn-preview">👁 Pratinjau Sebagai Siswa</button>
       <button class="btn primary" id="btn-add-bab">+ Tambah Bab Baru</button>
     </div>
   </div>
 
-  <div class="grid grid-4" style="margin-bottom:16px" id="course-stats"></div>
-
+  <div class="grid grid-4" style="margin-bottom:16px" id="stat-tiles"></div>
+  <div id="preview-panel"></div>
   <div id="bab-list"></div>
 `;
 
+let courseData = null;
+let classList = [];
+
+const statMeta = [
+  { key: "totalBab", label: "Total Bab", ic: "📘" },
+  { key: "totalTopik", label: "Total Topik", ic: "🧭" },
+  { key: "totalAktivitas", label: "Total Aktivitas", ic: "🗂" },
+  { key: "rerataKetuntasan", label: "Rata-rata Ketuntasan", ic: "📈", suffix: "%" }
+];
+
 function renderStats(s) {
-  document.getElementById("course-stats").innerHTML = `
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.totalBab}</div><div class="label">Bab · ${s.totalTopik} topik aktif</div></div><div class="ic mint">📚</div></div></div>
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.rerataKetuntasan}%</div><div class="label">Rerata Ketuntasan</div></div><div class="ic mint">📈</div></div></div>
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.totalAktivitas}</div><div class="label">Kuis &amp; Evaluasi</div></div><div class="ic mint">📝</div></div></div>
-    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s.totalSiswa}</div><div class="label">Siswa Terdaftar</div></div><div class="ic mint">🎓</div></div></div>
-  `;
+  document.getElementById("stat-tiles").innerHTML = statMeta.map(m => `
+    <div class="card stat-tile"><div class="top"><div><div class="text-metric">${s[m.key] ?? "–"}${s[m.key] !== undefined && m.suffix ? m.suffix : ""}</div><div class="label">${m.label}</div></div><div class="ic mint">${m.ic}</div></div></div>
+  `).join("");
 }
 
-const jenisIcon = { video: "▶", simulasi: "🧪", latihan: "✏️", kuis: "⏱", tugas: "📄" };
+function jenisChip(jenis) {
+  const map = { materi: "chip active", kuis: "chip warn", tugas: "chip done", forum: "chip" };
+  return `<span class="${map[jenis] || 'chip'}">${jenis}</span>`;
+}
 
 function renderBabList() {
   const el = document.getElementById("bab-list");
-  if (!courseState.babList.length) {
-    el.innerHTML = `<div class="empty">Belum ada bab. Klik "+ Tambah Bab Baru" untuk mulai menyusun kursus.</div>`;
-    return;
-  }
-  el.innerHTML = courseState.babList.map((bab, bi) => `
-    <div class="bab-card">
-      <div class="bab-head" data-toggle="${bab.id}">
-        <span class="handle">☰</span>
-        <div style="flex:1">
-          <span class="chip ${bab.status === 'aktif' ? 'active' : bab.status === 'draft' ? 'locked' : ''}">${bab.status.toUpperCase()}</span>
-          <div class="text-label-lg" style="margin-top:4px">Bab ${bi + 1} · ${bab.judul}</div>
-          <div class="text-body-sm text-muted">${bab.topikList.length} sub-topik · ${bab.topikList.reduce((a,t)=>a+t.aktivitas.length,0)} aktivitas</div>
+  el.innerHTML = courseData.babList.map(bab => `
+    <div class="card bab-card" data-bab-card="${bab.id}">
+      <div class="bab-head">
+        <div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <span class="text-headline-sm">${bab.judul}</span>
+            <span class="chip ${bab.status === 'aktif' ? 'active' : 'locked'}">${bab.status}</span>
+          </div>
+          <div class="text-body-sm text-muted">Kriteria: ${bab.kriteriaSelesai === 'salah-satu' ? 'Salah Satu Item' : 'Selesaikan Semua Item'}</div>
         </div>
-        <button class="btn sm" data-add-topik="${bab.id}">+ Topik</button>
+        <div class="row-actions">
+          <button class="btn sm" data-edit-bab="${bab.id}">Edit Bab</button>
+          <button class="btn sm" data-jadwal="${bab.id}" data-nama="${bab.judul}">📅 Atur Jadwal</button>
+          <button class="btn sm primary" data-add-topik="${bab.id}">+ Topik</button>
+        </div>
       </div>
-      <div class="bab-body" id="babbody-${bab.id}">
-        ${bab.topikList.map((tp, ti) => `
-          <div class="topik-row" style="display:block">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div class="text-label-lg">${bi+1}.${ti+1} ${tp.judul}</div>
-              <button class="btn sm" data-add-aktivitas="${bab.id}|${tp.id}">+ Aktivitas</button>
+      <div class="topik-wrap">
+        ${bab.topikList.map(topik => `
+          <div class="topik-block">
+            <div class="topik-head">
+              <span class="text-label-lg">📗 ${topik.judul}</span>
+              <button class="btn sm" data-add-akt="${topik.id}">+ Aktivitas</button>
             </div>
-            <div style="margin-top:6px">
-              ${tp.aktivitas.map(a => `
-                <div class="aktivitas-row">
-                  <span>${jenisIcon[a.jenis] || "•"} ${a.judul}</span>
-                  <span class="chip ${a.wajib ? 'active' : ''}">${a.wajib ? 'Wajib' : a.jenis}</span>
+            <div class="akt-wrap" data-topik-akt="${topik.id}">
+              ${topik.aktivitas.map((a, idx) => `
+                <div class="akt-row" data-akt="${a.id}">
+                  <div class="akt-row-head" data-expand="${a.id}">
+                    ${jenisChip(a.jenis)}
+                    <span class="grow"><b>${idx + 1}.</b> ${a.judul} ${a.wajib ? '<span class="chip warn" style="margin-left:4px">Wajib</span>' : ''}</span>
+                    <span class="text-body-sm text-muted">${a.syaratLabel}</span>
+                    <div class="row-actions" onclick="event.stopPropagation()">
+                      <button class="btn sm" data-move="up" data-move-id="${a.id}" data-topik="${topik.id}">▲</button>
+                      <button class="btn sm" data-move="down" data-move-id="${a.id}" data-topik="${topik.id}">▼</button>
+                      <button class="btn sm" data-edit-meta="${a.id}">Edit</button>
+                      <button class="btn sm" data-del-akt="${a.id}">Hapus</button>
+                    </div>
+                  </div>
+                  <div class="akt-content-panel" id="panel-${a.id}">
+                    <div class="form-field"><label>Durasi (menit)</label><input type="number" id="c-durasi-${a.id}" placeholder="Kosongkan jika tidak diubah"></div>
+                    <div class="form-field"><label>Maks. Percobaan (khusus kuis)</label><input type="number" id="c-attempts-${a.id}" placeholder="Kosongkan jika tidak diubah"></div>
+                    <div class="form-field"><label><input type="checkbox" id="c-acak-${a.id}" style="width:auto;margin-right:6px">Acak urutan soal (khusus kuis)</label></div>
+                    <div class="form-field"><label>Konten (HTML)</label><textarea id="c-konten-${a.id}" rows="4" placeholder="Kosongkan jika tidak diubah"></textarea></div>
+                    <div class="form-field"><label>Lampiran Baru (opsional)</label><input type="file" id="c-lampiran-${a.id}"></div>
+                    <div class="form-field">
+                      <label>Tautan Terkait (video/simulasi, opsional — kosongkan jika tidak diubah)</label>
+                      <div id="c-links-${a.id}"></div>
+                      <button type="button" class="btn sm" data-add-link="${a.id}">+ Tambah Tautan</button>
+                    </div>
+                    ${a.jenis === 'kuis' ? `<a class="btn sm" href="bank-soal.html?activityId=${a.id}">🗂 Kelola Soal Kuis Ini →</a>` : ""}
+                    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+                      <button class="btn primary sm" data-save-content="${a.id}">Simpan Konten</button>
+                    </div>
+                  </div>
                 </div>
-              `).join("") || `<div class="text-body-sm text-muted">Belum ada aktivitas.</div>`}
+              `).join("")}
             </div>
           </div>
-        `).join("")}
+        `).join("") || `<div class="empty" style="margin-top:10px">Belum ada topik. Klik "+ Topik" untuk memulai.</div>`}
       </div>
     </div>
-  `).join("");
+  `).join("") || `<div class="card"><div class="empty">Belum ada bab. Klik "+ Tambah Bab Baru" untuk mulai menyusun kurikulum.</div></div>`;
 
-  el.querySelectorAll("[data-toggle]").forEach(h => h.addEventListener("click", (e) => {
-    if (e.target.closest("button")) return;
-    document.getElementById("babbody-" + h.dataset.toggle).classList.toggle("open");
+  bindBabListEvents();
+}
+
+function bindBabListEvents() {
+  document.querySelectorAll("[data-add-topik]").forEach(b => b.addEventListener("click", () => openTopikModal(b.dataset.addTopik)));
+  document.querySelectorAll("[data-add-akt]").forEach(b => b.addEventListener("click", () => openAktModal(b.dataset.addAkt)));
+  document.querySelectorAll("[data-edit-bab]").forEach(b => b.addEventListener("click", () => openBabEdit(b.dataset.editBab)));
+  document.querySelectorAll("[data-jadwal]").forEach(b => b.addEventListener("click", () => openJadwal(b.dataset.jadwal, b.dataset.nama)));
+  document.querySelectorAll("[data-edit-meta]").forEach(b => b.addEventListener("click", () => openEditMeta(b.dataset.editMeta)));
+  document.querySelectorAll("[data-del-akt]").forEach(b => b.addEventListener("click", () => doDeleteAkt(b.dataset.delAkt)));
+  document.querySelectorAll("[data-move]").forEach(b => b.addEventListener("click", () => doMove(b.dataset.moveId, b.dataset.topik, b.dataset.move)));
+  document.querySelectorAll("[data-expand]").forEach(el => el.addEventListener("click", (e) => {
+    if (e.target.closest(".row-actions")) return;
+    document.getElementById("panel-" + el.dataset.expand).classList.toggle("open");
   }));
-  el.querySelectorAll("[data-add-topik]").forEach(b => b.addEventListener("click", () => openTopikModal(b.dataset.addTopik)));
-  el.querySelectorAll("[data-add-aktivitas]").forEach(b => b.addEventListener("click", () => {
-    const [babId, topikId] = b.dataset.addAktivitas.split("|");
-    openAktivitasModal(babId, topikId);
-  }));
+  document.querySelectorAll("[data-add-link]").forEach(b => b.addEventListener("click", () => addLinkRow(b.dataset.addLink)));
+  document.querySelectorAll("[data-save-content]").forEach(b => b.addEventListener("click", () => saveContent(b.dataset.saveContent)));
 }
 
-// ---- Modal helpers ----
-const modalBg = document.getElementById("modal-bg");
-const modalForm = document.getElementById("modal-form");
-let modalOnSubmit = null;
+function addLinkRow(aktId) {
+  const wrap = document.getElementById("c-links-" + aktId);
+  const rowId = "lr-" + Math.random().toString(36).slice(2, 7);
+  wrap.insertAdjacentHTML("beforeend", `
+    <div class="link-row" id="${rowId}">
+      <input placeholder="Judul tautan" class="lk-judul">
+      <input placeholder="https://..." class="lk-url">
+      <select class="lk-jenis"><option value="video">Video</option><option value="simulasi">Simulasi</option><option value="dokumen">Dokumen</option></select>
+      <button type="button" class="btn sm" onclick="document.getElementById('${rowId}').remove()">✕</button>
+    </div>
+  `);
+}
 
-function openModal(title, label1, showField2) {
-  document.getElementById("modal-title").textContent = title;
-  document.getElementById("modal-label-1").textContent = label1;
-  document.getElementById("modal-input-1").value = "";
-  document.getElementById("modal-input-2").value = "";
-  document.getElementById("modal-field-2").style.display = showField2 ? "flex" : "none";
-  modalBg.classList.add("open");
-}
-document.getElementById("modal-cancel").addEventListener("click", () => modalBg.classList.remove("open"));
+async function saveContent(aktId) {
+  const btn = document.querySelector(`[data-save-content="${aktId}"]`);
+  const payload = {};
+  const durasi = document.getElementById("c-durasi-" + aktId).value;
+  const attempts = document.getElementById("c-attempts-" + aktId).value;
+  const konten = document.getElementById("c-konten-" + aktId).value;
+  const acakEl = document.getElementById("c-acak-" + aktId);
+  const file = document.getElementById("c-lampiran-" + aktId).files[0];
+  const linkRows = Array.from(document.querySelectorAll(`#c-links-${aktId} .link-row`));
 
-document.getElementById("btn-add-bab").addEventListener("click", () => {
-  openModal("Tambah Bab Baru", "Judul Bab", true);
-  modalOnSubmit = async () => {
-    await LMS_API.call("addBab", { courseId: currentCourseId, judul: document.getElementById("modal-input-1").value, deskripsi: document.getElementById("modal-input-2").value });
-    await loadCourse();
-  };
-});
-document.getElementById("btn-add-topik").addEventListener("click", () => {
-  if (!courseState.babList.length) return lmsToast("Buat Bab terlebih dahulu.", true);
-  openTopikModal(courseState.babList[0].id);
-});
-function openTopikModal(babId) {
-  openModal("Tambah Topik", "Judul Topik", false);
-  modalOnSubmit = async () => {
-    await LMS_API.call("addTopik", { babId, judul: document.getElementById("modal-input-1").value });
-    await loadCourse();
-  };
-}
-function openAktivitasModal(babId, topikId) {
-  openModal("Tambah Aktivitas", "Judul Aktivitas (mis. Kuis: Teorema Pythagoras)", false);
-  modalOnSubmit = async () => {
-    await LMS_API.call("addAktivitas", { topikId, judul: document.getElementById("modal-input-1").value, jenis: "latihan", wajib: true });
-    await loadCourse();
-  };
-}
-modalForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
+  if (durasi !== "") payload.durasiMenit = Number(durasi);
+  if (attempts !== "") payload.attemptsMax = Number(attempts);
+  if (konten.trim() !== "") payload.konten = konten;
+  if (acakEl.checked) payload.acak = true;
+  if (linkRows.length) {
+    payload.links = linkRows.map(r => ({
+      judul: r.querySelector(".lk-judul").value, url: r.querySelector(".lk-url").value, jenis: r.querySelector(".lk-jenis").value
+    })).filter(l => l.url);
+  }
+
+  btn.disabled = true; btn.textContent = "Menyimpan…";
   try {
-    if (modalOnSubmit) await modalOnSubmit();
-    modalBg.classList.remove("open");
-  } catch (err) { lmsToast(err.message, true); }
-});
+    if (file) {
+      const base64 = await fileToBase64(file);
+      const uploaded = await LMS_API.call("uploadFile", { fileBase64: base64, fileName: file.name, mimeType: file.type });
+      payload.lampiranUrl = uploaded.url;
+    }
+    if (Object.keys(payload).length === 0) { lmsToast("Tidak ada perubahan untuk disimpan.", true); return; }
+    await LMS_API.call("updateAktivitas", { id: aktId, ...payload });
+    lmsToast("Konten aktivitas berhasil diperbarui.");
+  } catch (err) {
+    lmsToast(err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Simpan Konten";
+  }
+}
 
-async function loadCourse() {
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ---------- Load ----------
+async function load() {
+  document.getElementById("bab-list").innerHTML = `<div class="card skeleton" style="height:140px"></div>`;
   try {
-    const data = await LMS_API.call("getCourseDetail", { courseId: currentCourseId });
-    currentCourseId = data.course.id;
-    document.getElementById("course-title").textContent = "Manajemen Kursus: " + data.course.nama;
-    document.getElementById("course-sub").textContent = data.course.deskripsi || "Susun Bab → Topik → Aktivitas untuk kelas Anda.";
-    renderStats(data.stats);
-    courseState.babList = data.babList;
+    const [detail, classes] = await Promise.all([
+      LMS_API.call("getCourseDetail", {}),
+      LMS_API.call("listClasses", {}).catch(() => [])
+    ]);
+    courseData = detail;
+    classList = classes.filter(c => c.status === "aktif");
+    document.getElementById("course-title").textContent = detail.course.nama;
+    document.getElementById("course-desc").textContent = detail.course.deskripsi || "Susun bab, topik, dan aktivitas belajar berurutan untuk kelas Anda.";
+    renderStats(detail.stats);
     renderBabList();
   } catch (err) {
     lmsToast(err.message, true);
-    renderStats({ totalBab: 0, totalTopik: 0, rerataKetuntasan: 0, totalAktivitas: 0, totalSiswa: 0 });
-    renderBabList();
+    document.getElementById("bab-list").innerHTML = `<div class="card"><div class="empty">${err.message}</div></div>`;
   }
 }
-loadCourse();
+load();
+
+// ---------- Modal helpers ----------
+function openModal(id) { document.getElementById(id).classList.add("open"); }
+function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => closeModal(b.dataset.close)));
+
+// ---------- Bab: Tambah / Edit ----------
+document.getElementById("btn-add-bab").addEventListener("click", () => {
+  document.getElementById("modal-bab-title").textContent = "Tambah Bab Baru";
+  document.getElementById("form-bab").reset();
+  document.getElementById("bab-id").value = "";
+  document.getElementById("bab-status-field").style.display = "none";
+  document.getElementById("bab-kriteria-field").style.display = "none";
+  openModal("modal-bab");
+});
+
+function openBabEdit(id) {
+  const bab = courseData.babList.find(b => b.id === id);
+  if (!bab) return;
+  document.getElementById("modal-bab-title").textContent = "Edit Bab";
+  document.getElementById("bab-id").value = bab.id;
+  document.getElementById("bab-judul").value = bab.judul;
+  document.getElementById("bab-deskripsi").value = "";
+  document.getElementById("bab-status").value = bab.status;
+  document.getElementById("bab-kriteria").value = bab.kriteriaSelesai;
+  document.getElementById("bab-status-field").style.display = "block";
+  document.getElementById("bab-kriteria-field").style.display = "block";
+  openModal("modal-bab");
+}
+
+document.getElementById("form-bab").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("bab-id").value;
+  const judul = document.getElementById("bab-judul").value;
+  const deskripsi = document.getElementById("bab-deskripsi").value;
+  try {
+    if (id) {
+      await LMS_API.call("updateBab", {
+        id, judul, deskripsi,
+        status: document.getElementById("bab-status").value
+      });
+      await LMS_API.call("setBabKriteria", { babId: id, kriteriaSelesai: document.getElementById("bab-kriteria").value });
+      lmsToast("Bab berhasil diperbarui.");
+    } else {
+      await LMS_API.call("addBab", { judul, deskripsi });
+      lmsToast("Bab baru berhasil ditambahkan.");
+    }
+    closeModal("modal-bab");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+// ---------- Topik ----------
+function openTopikModal(babId) {
+  document.getElementById("form-topik").reset();
+  document.getElementById("topik-bab-id").value = babId;
+  openModal("modal-topik");
+}
+document.getElementById("form-topik").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await LMS_API.call("addTopik", { babId: document.getElementById("topik-bab-id").value, judul: document.getElementById("topik-judul").value });
+    lmsToast("Topik berhasil ditambahkan.");
+    closeModal("modal-topik");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+// ---------- Aktivitas: Tambah ----------
+document.getElementById("akt-jenis").addEventListener("change", (e) => {
+  const jenis = e.target.value;
+  document.getElementById("akt-kkm-field").style.display = jenis === "kuis" ? "block" : "none";
+  document.getElementById("akt-attempts-field").style.display = jenis === "kuis" ? "block" : "none";
+  document.getElementById("akt-acak-field").style.display = jenis === "kuis" ? "block" : "none";
+  document.getElementById("akt-konten-field").style.display = jenis === "materi" ? "block" : "none";
+});
+
+function openAktModal(topikId) {
+  document.getElementById("form-akt").reset();
+  document.getElementById("akt-topik-id").value = topikId;
+  document.getElementById("akt-jenis").dispatchEvent(new Event("change"));
+  openModal("modal-akt");
+}
+
+document.getElementById("form-akt").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("akt-submit");
+  btn.disabled = true; btn.textContent = "Menyimpan…";
+  try {
+    let lampiranUrl = "";
+    const file = document.getElementById("akt-lampiran").files[0];
+    if (file) {
+      const base64 = await fileToBase64(file);
+      const uploaded = await LMS_API.call("uploadFile", { fileBase64: base64, fileName: file.name, mimeType: file.type });
+      lampiranUrl = uploaded.url;
+    }
+    await LMS_API.call("addAktivitas", {
+      topikId: document.getElementById("akt-topik-id").value,
+      judul: document.getElementById("akt-judul").value,
+      jenis: document.getElementById("akt-jenis").value,
+      wajib: document.getElementById("akt-wajib").checked,
+      kkm: Number(document.getElementById("akt-kkm").value || 0),
+      durasiMenit: Number(document.getElementById("akt-durasi").value || 0),
+      attemptsMax: Number(document.getElementById("akt-attempts").value || 0),
+      acak: document.getElementById("akt-acak").checked,
+      syaratLabel: document.getElementById("akt-syarat").value,
+      konten: document.getElementById("akt-konten").value,
+      lampiranUrl
+    });
+    lmsToast("Aktivitas berhasil ditambahkan.");
+    closeModal("modal-akt");
+    load();
+  } catch (err) {
+    lmsToast(err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Simpan Aktivitas";
+  }
+});
+
+// ---------- Aktivitas: Edit metadata ----------
+function findAkt(id) {
+  for (const bab of courseData.babList) for (const t of bab.topikList) {
+    const a = t.aktivitas.find(x => x.id === id);
+    if (a) return { akt: a, topik: t };
+  }
+  return null;
+}
+
+function openEditMeta(id) {
+  const found = findAkt(id);
+  if (!found) return;
+  const { akt, topik } = found;
+  document.getElementById("em-id").value = akt.id;
+  document.getElementById("em-judul").value = akt.judul;
+  document.getElementById("em-wajib").checked = !!akt.wajib;
+  document.getElementById("em-kkm").value = akt.kkm || 0;
+  document.getElementById("em-syarat").value = akt.syaratLabel || "";
+  const siblingOptions = topik.aktivitas.filter(a => a.id !== id)
+    .map(a => `<option value="${a.id}" ${akt.prasyaratId === a.id ? "selected" : ""}>${a.judul}</option>`).join("");
+  document.getElementById("em-prasyarat").innerHTML = `<option value="">— Tidak ada (item pembuka) —</option>` + siblingOptions;
+  openModal("modal-edit-meta");
+}
+
+document.getElementById("form-edit-meta").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await LMS_API.call("updateAktivitas", {
+      id: document.getElementById("em-id").value,
+      judul: document.getElementById("em-judul").value,
+      wajib: document.getElementById("em-wajib").checked,
+      kkm: Number(document.getElementById("em-kkm").value || 0),
+      prasyaratId: document.getElementById("em-prasyarat").value,
+      syaratLabel: document.getElementById("em-syarat").value
+    });
+    lmsToast("Aktivitas berhasil diperbarui.");
+    closeModal("modal-edit-meta");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+async function doDeleteAkt(id) {
+  if (!confirm("Hapus aktivitas ini? Progres siswa terkait aktivitas ini tidak akan terhapus otomatis.")) return;
+  try {
+    await LMS_API.call("deleteAktivitas", { id });
+    lmsToast("Aktivitas dihapus.");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+}
+
+async function doMove(id, topikId, dir) {
+  const topik = courseData.babList.flatMap(b => b.topikList).find(t => t.id === topikId);
+  if (!topik) return;
+  const ids = topik.aktivitas.map(a => a.id);
+  const idx = ids.indexOf(id);
+  const swapWith = dir === "up" ? idx - 1 : idx + 1;
+  if (swapWith < 0 || swapWith >= ids.length) return;
+  [ids[idx], ids[swapWith]] = [ids[swapWith], ids[idx]];
+  try {
+    await LMS_API.call("reorderAktivitas", { topikId, orderedIds: ids });
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+}
+
+// ---------- Jadwal ----------
+function openJadwal(babId, nama) {
+  document.getElementById("form-jadwal").reset();
+  document.getElementById("jadwal-bab-id").value = babId;
+  document.getElementById("jadwal-bab-nama").textContent = nama;
+  document.getElementById("jadwal-kelas").innerHTML = classList.map(c => `<option value="${c.id}">${c.nama}</option>`).join("") || `<option value="" disabled>Belum ada kelas aktif</option>`;
+  openModal("modal-jadwal");
+}
+document.getElementById("form-jadwal").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const buka = new Date(document.getElementById("jadwal-buka").value).toISOString();
+    const tenggat = new Date(document.getElementById("jadwal-tenggat").value).toISOString();
+    await LMS_API.call("setJadwalKelas", {
+      babId: document.getElementById("jadwal-bab-id").value,
+      classId: document.getElementById("jadwal-kelas").value,
+      bukaAt: buka, tenggatAt: tenggat
+    });
+    lmsToast("Jadwal berhasil disimpan.");
+    closeModal("modal-jadwal");
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+// ---------- Pratinjau Sebagai Siswa ----------
+let previewOpen = false;
+document.getElementById("btn-preview").addEventListener("click", async () => {
+  const panel = document.getElementById("preview-panel");
+  if (previewOpen) { panel.innerHTML = ""; previewOpen = false; return; }
+  panel.innerHTML = `<div class="card skeleton" style="height:100px;margin-bottom:16px"></div>`;
+  try {
+    const data = await LMS_API.call("previewAsStudent", {});
+    panel.innerHTML = `<div class="card" style="margin-bottom:16px;border-color:var(--secondary)">
+      <div class="text-label-sm text-muted" style="margin-bottom:6px">MODE PRATINJAU SISWA — tampilan ini bersifat baca saja</div>
+      ${(data.bab || []).map(bab => `
+        <div style="margin-bottom:14px">
+          <h3 class="text-headline-sm">${bab.judulUnit} — ${bab.persenSelesai}% selesai (contoh siswa)</h3>
+          <div class="progress" style="margin:8px 0"><span style="width:${bab.persenSelesai}%"></span></div>
+          <div class="step-track">
+            ${bab.steps.map(s => `<div class="step ${s.status}"><div class="text-body-sm">${s.urutan}. ${s.judul}</div><div class="text-body-sm" style="opacity:.8">${s.syaratLabel || s.jenis}</div></div>`).join("")}
+          </div>
+        </div>
+      `).join("") || `<div class="empty">Belum ada bab yang dipublikasikan.</div>`}
+    </div>`;
+    previewOpen = true;
+  } catch (err) {
+    lmsToast(err.message, true);
+    panel.innerHTML = "";
+  }
+});
 </script>
 </body>
 </html>

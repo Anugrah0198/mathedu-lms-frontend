@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kelola Kelas</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .modal-bg{position:fixed;inset:0;background:rgba(11,29,44,.5);display:none;align-items:center;justify-content:center;z-index:40}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--surface);border-radius:var(--r-lg);padding:22px;width:100%;max-width:460px;box-shadow:var(--shadow-3)}
+  .class-card{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;
+    border:1px solid var(--border);border-radius:var(--r-lg);margin-bottom:10px}
+  .check-list{max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r-md);padding:8px}
+  .check-row{display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:13px}
+</style>
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["superadmin"]);</script>
+
+<div id="root"></div>
+
+<!-- Modal: Buat Kelas -->
+<div class="modal-bg" id="modal-class">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:14px">Buat Kelas Baru</h3>
+    <form id="form-class">
+      <div class="form-field"><label>Nama Kelas</label><input id="c-nama" placeholder="mis. 8B" required></div>
+      <div class="form-field"><label>Tingkat</label><input id="c-tingkat" placeholder="mis. 8"></div>
+      <div class="form-field"><label>Wali Kelas (opsional)</label>
+        <select id="c-wali"><option value="">— Belum ditentukan —</option></select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-class">Batal</button>
+        <button type="submit" class="btn primary">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Enrollment -->
+<div class="modal-bg" id="modal-enroll">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:6px">Masukkan Siswa ke Kelas</h3>
+    <p class="text-body-sm text-muted" style="margin-bottom:12px">Kelas tujuan: <b id="enroll-target-name"></b></p>
+    <form id="form-enroll">
+      <input type="hidden" id="enroll-class-id">
+      <div class="form-field">
+        <label>Pilih Siswa</label>
+        <div class="check-list" id="enroll-siswa-list"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-enroll">Batal</button>
+        <button type="submit" class="btn primary">Daftarkan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Plotting Mengajar -->
+<div class="modal-bg" id="modal-assign">
+  <div class="modal">
+    <h3 class="text-headline-sm" style="margin-bottom:14px">Tugaskan Guru ke Kelas</h3>
+    <form id="form-assign">
+      <div class="form-field"><label>Guru</label><select id="a-guru" required></select></div>
+      <div class="form-field"><label>Kelas</label><select id="a-kelas" required></select></div>
+      <div class="form-field"><label>Mata Pelajaran</label><input id="a-mapel" placeholder="mis. Matematika" required></div>
+      <p class="text-body-sm text-muted">Penugasan tersimpan di sheet <code>TeacherAssignments</code>. Belum ada tampilan daftar penugasan di halaman ini — cek langsung di Google Sheet bila diperlukan.</p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button type="button" class="btn" data-close="modal-assign">Batal</button>
+        <button type="submit" class="btn primary">Tugaskan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+const root = lmsRenderShell({ activeId: "kelola-kelas", title: "Kelola Kelas" });
+
+root.innerHTML = `
+  <div class="breadcrumb">Administrasi &nbsp;›&nbsp; <b>Kelola Kelas</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">Kelola Kelas</h1>
+      <p>Pembuatan rombongan belajar, pendaftaran siswa, dan penugasan guru mata pelajaran.</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn" id="btn-open-assign">Plotting Mengajar</button>
+      <button class="btn primary" id="btn-open-class">+ Buat Kelas Baru</button>
+    </div>
+  </div>
+
+  <div id="class-list"></div>
+`;
+
+let classes = [];
+let guruList = [];
+let siswaList = [];
+
+function renderClasses() {
+  const el = document.getElementById("class-list");
+  el.innerHTML = classes.map(c => `
+    <div class="class-card">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="text-label-lg">${c.nama}</span>
+          <span class="chip ${c.status === 'aktif' ? 'active' : 'locked'}">${c.status}</span>
+        </div>
+        <div class="text-body-sm text-muted">Tingkat ${c.tingkat || "-"} · ${c.jumlahSiswa} siswa terdaftar</div>
+      </div>
+      <div class="row-actions" style="display:flex;gap:6px">
+        <button class="btn sm" data-enroll="${c.id}" data-nama="${c.nama}">+ Daftarkan Siswa</button>
+        ${c.status === "aktif" ? `<button class="btn sm" data-archive="${c.id}">Arsipkan</button>` : ""}
+      </div>
+    </div>
+  `).join("") || `<div class="card"><div class="empty">Belum ada kelas. Klik "+ Buat Kelas Baru" untuk memulai.</div></div>`;
+
+  el.querySelectorAll("[data-enroll]").forEach(b => b.addEventListener("click", () => openEnroll(b.dataset.enroll, b.dataset.nama)));
+  el.querySelectorAll("[data-archive]").forEach(b => b.addEventListener("click", () => doArchive(b.dataset.archive)));
+}
+
+async function load() {
+  document.getElementById("class-list").innerHTML = `<div class="card skeleton" style="height:80px"></div>`;
+  try {
+    const [cls, guru, siswa] = await Promise.all([
+      LMS_API.call("listClasses", {}),
+      LMS_API.call("getUsersList", { role: "guru" }),
+      LMS_API.call("getUsersList", { role: "siswa" })
+    ]);
+    classes = cls; guruList = guru; siswaList = siswa;
+    renderClasses();
+    fillSelects();
+  } catch (err) {
+    lmsToast(err.message, true);
+    renderClasses();
+  }
+}
+load();
+
+function fillSelects() {
+  document.getElementById("c-wali").innerHTML = `<option value="">— Belum ditentukan —</option>` +
+    guruList.map(g => `<option value="${g.id}">${g.nama}</option>`).join("");
+  document.getElementById("a-guru").innerHTML = guruList.map(g => `<option value="${g.id}">${g.nama}</option>`).join("")
+    || `<option value="" disabled>Belum ada akun guru</option>`;
+  document.getElementById("a-kelas").innerHTML = classes.filter(c => c.status === "aktif").map(c => `<option value="${c.id}">${c.nama}</option>`).join("")
+    || `<option value="" disabled>Belum ada kelas aktif</option>`;
+}
+
+// ---------- Modal helpers ----------
+function openModal(id) { document.getElementById(id).classList.add("open"); }
+function closeModal(id) { document.getElementById(id).classList.remove("open"); }
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => closeModal(b.dataset.close)));
+
+document.getElementById("btn-open-class").addEventListener("click", () => openModal("modal-class"));
+document.getElementById("btn-open-assign").addEventListener("click", () => openModal("modal-assign"));
+
+document.getElementById("form-class").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await LMS_API.call("createClass", {
+      nama: document.getElementById("c-nama").value,
+      tingkat: document.getElementById("c-tingkat").value,
+      waliKelasId: document.getElementById("c-wali").value
+    });
+    lmsToast("Kelas baru berhasil dibuat.");
+    closeModal("modal-class");
+    e.target.reset();
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+async function doArchive(id) {
+  if (!confirm("Arsipkan kelas ini? Kelas yang diarsipkan tidak akan muncul lagi sebagai pilihan aktif.")) return;
+  try {
+    await LMS_API.call("archiveClass", { id });
+    lmsToast("Kelas diarsipkan.");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+}
+
+function openEnroll(classId, nama) {
+  document.getElementById("enroll-class-id").value = classId;
+  document.getElementById("enroll-target-name").textContent = nama;
+  document.getElementById("enroll-siswa-list").innerHTML = siswaList.map(s => `
+    <label class="check-row"><input type="checkbox" value="${s.id}"> ${s.nama} <span class="text-muted">(${s.kelas || "belum ada kelas"})</span></label>
+  `).join("") || `<div class="text-body-sm text-muted">Belum ada akun siswa. Tambahkan di menu Kelola Pengguna.</div>`;
+  openModal("modal-enroll");
+}
+document.getElementById("form-enroll").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const siswaIds = Array.from(document.querySelectorAll("#enroll-siswa-list input:checked")).map(i => i.value);
+  if (!siswaIds.length) return lmsToast("Pilih minimal satu siswa.", true);
+  try {
+    const res = await LMS_API.call("enrollStudentsBulk", { classId: document.getElementById("enroll-class-id").value, siswaIds });
+    lmsToast(`${res.jumlahDidaftarkan} siswa berhasil didaftarkan.`);
+    closeModal("modal-enroll");
+    load();
+  } catch (err) { lmsToast(err.message, true); }
+});
+
+document.getElementById("form-assign").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await LMS_API.call("assignTeacher", {
+      guruId: document.getElementById("a-guru").value,
+      classId: document.getElementById("a-kelas").value,
+      mapel: document.getElementById("a-mapel").value
+    });
+    lmsToast("Guru berhasil ditugaskan ke kelas.");
+    closeModal("modal-assign");
+    e.target.reset();
+  } catch (err) { lmsToast(err.message, true); }
+});
+</script>
+</body>
+</html>

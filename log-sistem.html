@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Log Sistem & Keamanan</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .tabs-row{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tabs-row button{border:1px solid var(--border-strong);background:var(--surface);border-radius:var(--r-full);
+    padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer;color:var(--text-soft)}
+  .tabs-row button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+</style>
+</head>
+<body>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/shell.js"></script>
+<script>const user = LMS_AUTH.requireRole(["superadmin"]);</script>
+
+<div id="root"></div>
+
+<script>
+const root = lmsRenderShell({ activeId: "log-sistem", title: "Log Sistem & Keamanan" });
+
+root.innerHTML = `
+  <div class="breadcrumb">Administrasi &nbsp;›&nbsp; <b>Log Sistem &amp; Keamanan</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">Log Sistem &amp; Keamanan</h1>
+      <p>Jejak audit perubahan data, riwayat percobaan masuk, dan pencadangan basis data.</p>
+    </div>
+    <div class="head-actions">
+      <button class="btn primary" id="btn-backup">Buat Cadangan (Backup)</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px; background:var(--surface-low); border-style:dashed">
+    <p class="text-body-sm text-muted">
+      <b>Catatan keterbatasan platform:</b> Google Apps Script tidak menyediakan alamat IP asli pemanggil web app,
+      sehingga kolom "IP" di bawah hanya bersifat informatif dari klien (self-reported), bukan sumber forensik keamanan.
+    </p>
+  </div>
+
+  <div class="tabs-row" id="tabs">
+    <button class="active" data-tab="audit">Jejak Audit</button>
+    <button data-tab="login">Riwayat Akses (Login)</button>
+  </div>
+
+  <div class="card tab-panel active" id="panel-audit">
+    <table class="dt">
+      <thead><tr><th>Waktu</th><th>Aktor</th><th>Aksi</th></tr></thead>
+      <tbody id="audit-body"></tbody>
+    </table>
+  </div>
+
+  <div class="card tab-panel" id="panel-login">
+    <table class="dt">
+      <thead><tr><th>Waktu</th><th>Identitas</th><th>Status</th><th>Keterangan</th><th>IP (klien)</th></tr></thead>
+      <tbody id="login-body"></tbody>
+    </table>
+  </div>
+`;
+
+document.querySelectorAll("#tabs button").forEach(btn => btn.addEventListener("click", () => {
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+}));
+
+function fmtWaktu(iso) {
+  try { return new Date(iso).toLocaleString("id-ID"); } catch (e) { return iso; }
+}
+
+async function loadAudit() {
+  document.getElementById("audit-body").innerHTML = `<tr><td colspan="3"><div class="card skeleton" style="height:60px"></div></td></tr>`;
+  try {
+    const logs = await LMS_API.call("getAuditLog", { limit: 200 });
+    document.getElementById("audit-body").innerHTML = logs.map(l => `
+      <tr><td>${fmtWaktu(l.waktu)}</td><td>${l.aktor}</td><td>${l.aksi}</td></tr>
+    `).join("") || `<tr><td colspan="3"><div class="empty">Belum ada aktivitas tercatat.</div></td></tr>`;
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
+
+async function loadLogin() {
+  document.getElementById("login-body").innerHTML = `<tr><td colspan="5"><div class="card skeleton" style="height:60px"></div></td></tr>`;
+  try {
+    const logs = await LMS_API.call("getLoginHistory", { limit: 200 });
+    document.getElementById("login-body").innerHTML = logs.map(l => `
+      <tr>
+        <td>${fmtWaktu(l.waktu)}</td>
+        <td>${l.identity}</td>
+        <td><span class="chip ${l.status === 'berhasil' ? 'done' : 'warn'}">${l.status}</span></td>
+        <td>${l.keterangan}</td>
+        <td>${l.ipDilaporkanKlien || "—"}</td>
+      </tr>
+    `).join("") || `<tr><td colspan="5"><div class="empty">Belum ada riwayat login.</div></td></tr>`;
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
+
+loadAudit();
+loadLogin();
+
+document.getElementById("btn-backup").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-backup");
+  btn.disabled = true; btn.textContent = "Membuat cadangan…";
+  try {
+    const res = await LMS_API.call("exportBackup", {});
+    lmsToast("Cadangan berhasil dibuat.");
+    window.open(res.url, "_blank");
+  } catch (err) {
+    lmsToast(err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = "Buat Cadangan (Backup)";
+  }
+});
+</script>
+</body>
+</html>

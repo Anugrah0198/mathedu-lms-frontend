@@ -10,6 +10,7 @@
   .step-track{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}
   .step{flex:0 0 auto;min-width:160px;border-radius:var(--r-md);padding:10px 12px;border:1px solid var(--border)}
   .step.done{background:var(--secondary-container);border-color:transparent}
+  .step.viewed{background:var(--surface-low);border-color:var(--secondary)}
   .step.active{background:var(--primary);color:#fff;border-color:transparent}
   .step.locked{background:var(--surface-low);color:var(--text-soft)}
   .navsoal{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
@@ -23,6 +24,15 @@
   .opt.selected{border-color:var(--secondary);background:var(--secondary-container)}
   .opt .letter{width:28px;height:28px;border-radius:50%;background:var(--surface-low);display:flex;
     align-items:center;justify-content:center;font-weight:700;flex:0 0 auto}
+  .welcome-banner{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;border-radius:var(--r-lg);
+    padding:20px 24px;margin-bottom:16px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}
+  .welcome-banner .chip-ghost{background:rgba(255,255,255,.18);color:#fff;border-radius:var(--r-full);padding:8px 14px;font-size:12.5px;font-weight:600}
+  .path-layout{display:grid;grid-template-columns:1.7fr 1fr;gap:16px;align-items:start}
+  @media (max-width:900px){.path-layout{grid-template-columns:1fr}}
+  .side-card{margin-bottom:16px}
+  .deadline-item{padding:10px 0;border-bottom:1px solid var(--border)}
+  .deadline-item:last-child{border-bottom:none}
+  .badge-tile-sm{border:1px solid var(--border);border-radius:var(--r-md);padding:10px;text-align:center}
 </style>
 </head>
 <body>
@@ -34,68 +44,264 @@
 <div id="root"></div>
 
 <script>
-const root = lmsRenderShell({ activeId: "jalur-belajar", title: "Jalur Belajar" });
+const root = lmsRenderShell({ activeId: "jalur-belajar", title: "Dashboard & Jalur Belajar" });
 root.innerHTML = `
-  <div class="breadcrumb">Kurikulum Merdeka &nbsp;›&nbsp; <b>Jalur Belajar</b></div>
-  <div id="path-header" class="card" style="margin-bottom:16px"></div>
-  <div id="path-body"></div>
+  <div class="breadcrumb">Kurikulum Merdeka &nbsp;›&nbsp; <b>Dashboard &amp; Jalur Belajar</b></div>
+  <div id="welcome-banner"></div>
+  <div class="grid grid-3" style="margin-bottom:16px" id="kpi-tiles"></div>
+  <div class="path-layout">
+    <div>
+      <div id="bab-list" style="display:flex;flex-direction:column;gap:16px"></div>
+      <div id="path-body" style="margin-top:16px"></div>
+    </div>
+    <div>
+      <div class="card side-card">
+        <h3 class="text-headline-sm" style="margin-bottom:10px">📅 Jadwal &amp; Tenggat</h3>
+        <div id="jadwal-list"></div>
+      </div>
+      <div class="card side-card">
+        <h3 class="text-headline-sm" style="margin-bottom:10px">📣 Pengumuman</h3>
+        <div id="ann-list-mini"></div>
+      </div>
+      <div class="card side-card">
+        <h3 class="text-headline-sm" style="margin-bottom:10px">🏅 Lencana Pencapaian</h3>
+        <div class="grid grid-4" id="badge-list-mini"></div>
+      </div>
+    </div>
+  </div>
 `;
 
+// ---------- Dashboard: profil, jadwal, pengumuman ----------
+async function loadDashboardWidgets() {
+  document.getElementById("kpi-tiles").innerHTML = Array(3).fill('<div class="card skeleton" style="height:80px"></div>').join("");
+  try {
+    const p = await LMS_API.call("getProfile", {});
+    document.getElementById("welcome-banner").innerHTML = `
+      <div class="welcome-banner">
+        <div>
+          <div class="text-headline-md" style="color:#fff">Selamat Datang, ${p.nama.split(" ")[0]} 👋</div>
+          <div style="opacity:.9;font-size:13px;margin-top:2px">${p.kelas || "-"} · NIS ${p.nis}</div>
+        </div>
+        <div class="chip-ghost">🏆 Peringkat #${p.peringkatKelas} di Kelas</div>
+      </div>
+    `;
+    document.getElementById("kpi-tiles").innerHTML = `
+      <div class="card stat-tile"><div class="top"><div><div class="text-metric">${p.rataRata}</div><div class="label">Rata-rata Nilai</div></div><div class="ic mint">📈</div></div></div>
+      <div class="card stat-tile"><div class="top"><div><div class="text-metric">#${p.peringkatKelas}</div><div class="label">Peringkat Kelas</div></div><div class="ic mint">🏆</div></div></div>
+      <div class="card stat-tile"><div class="top"><div><div class="text-metric">${p.badges.length}</div><div class="label">Lencana Diraih</div></div><div class="ic mint">🏅</div></div></div>
+    `;
+    document.getElementById("badge-list-mini").innerHTML = p.badges.slice(0, 4).map(b => `
+      <div class="badge-tile-sm"><div style="font-size:18px">🏅</div><div class="text-body-sm" style="margin-top:4px">${b.judul}</div></div>
+    `).join("") || `<div class="empty">Belum ada lencana. Selesaikan bab dengan nilai sempurna untuk meraihnya!</div>`;
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+
+  try {
+    const jadwal = await LMS_API.call("getScheduleSiswa", {});
+    document.getElementById("jadwal-list").innerHTML = jadwal.map(j => `
+      <div class="deadline-item">
+        <div class="text-label-lg">${j.babJudul}</div>
+        <div class="text-body-sm text-muted">Tenggat: ${new Date(j.tenggatAt).toLocaleString("id-ID")}</div>
+      </div>
+    `).join("") || `<div class="empty">Belum ada jadwal tenggat untuk kelas Anda.</div>`;
+  } catch (err) { /* diam-diam abaikan jika gagal, dashboard tetap tampil */ }
+
+  try {
+    const ann = await LMS_API.call("getAnnouncements", {});
+    document.getElementById("ann-list-mini").innerHTML = ann.slice(0, 3).map(a => `
+      <div class="deadline-item">
+        <div class="text-label-lg">${a.judul}</div>
+        <div class="text-body-sm text-muted" style="margin:4px 0">${a.isi}</div>
+        <div class="text-body-sm text-muted">${a.authorNama} · ${new Date(a.createdAt).toLocaleDateString("id-ID")}</div>
+      </div>
+    `).join("") || `<div class="empty">Belum ada pengumuman.</div>`;
+  } catch (err) { /* abaikan */ }
+}
+loadDashboardWidgets();
+
+// Catatan: sejak backend direvisi, getStudentPath mengembalikan SEMUA bab
+// sekaligus sebagai array ({kurikulum, bab:[{babId, judulUnit, persenSelesai, steps}]}),
+// bukan cuma satu bab aktif seperti versi lama. Halaman ini dirender ulang
+// sebagai daftar kartu per-bab, masing-masing dengan step-track sendiri.
 let pathData = null;
 
-function renderHeader(d) {
-  document.getElementById("path-header").innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
-      <div>
-        <div class="text-label-sm text-muted">${d.kurikulum}</div>
-        <h1 class="text-headline-md" style="margin:4px 0">${d.judulUnit}</h1>
-      </div>
-      <div style="text-align:right">
-        <div class="text-label-sm text-muted">Status Penyelesaian</div>
-        <div class="text-headline-sm">${d.persenSelesai}% Selesai</div>
-      </div>
-    </div>
-    <div class="progress" style="margin:10px 0"><span style="width:${d.persenSelesai}%"></span></div>
-    <div class="step-track">
-      ${d.steps.map(s => `
-        <div class="step ${s.status}" data-step="${s.id}" style="cursor:${s.status==='locked'?'not-allowed':'pointer'}">
-          <div class="text-body-sm">${s.status==='done'?'✔':s.status==='active'?'▶':'🔒'} ${s.urutan}. ${s.judul}</div>
-          <div class="text-body-sm" style="opacity:.8">${s.subtitle}</div>
+function stepIcon(status) {
+  return status === "done" ? "✔" : status === "viewed" ? "👁" : status === "active" ? "▶" : "🔒";
+}
+
+function findStepById(id) {
+  for (const bab of (pathData?.bab || [])) {
+    const s = bab.steps.find(x => x.id === id);
+    if (s) return s;
+  }
+  return null;
+}
+
+function renderBabList(d) {
+  const list = document.getElementById("bab-list");
+  if (!d.bab || !d.bab.length) {
+    list.innerHTML = `<div class="card"><div class="empty">Belum ada materi yang dipublikasikan untuk kelas Anda.</div></div>`;
+    return;
+  }
+  list.innerHTML = d.bab.map(bab => `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+        <div>
+          <div class="text-label-sm text-muted">${d.kurikulum}</div>
+          <h2 class="text-headline-md" style="margin:4px 0">${bab.judulUnit}</h2>
         </div>
-      `).join("")}
+        <div style="text-align:right">
+          <div class="text-label-sm text-muted">Status Penyelesaian</div>
+          <div class="text-headline-sm">${bab.persenSelesai}% Selesai</div>
+        </div>
+      </div>
+      <div class="progress" style="margin:10px 0"><span style="width:${bab.persenSelesai}%"></span></div>
+      <div class="step-track">
+        ${bab.steps.map(s => `
+          <div class="step ${s.status}" data-step="${s.id}" style="cursor:${s.status === 'locked' ? 'not-allowed' : 'pointer'}">
+            <div class="text-body-sm">${stepIcon(s.status)} ${s.urutan}. ${s.judul}</div>
+            <div class="text-body-sm" style="opacity:.8">${s.syaratLabel || s.jenis}</div>
+          </div>
+        `).join("")}
+      </div>
     </div>
-  `;
-  document.querySelectorAll("[data-step]").forEach(el => el.addEventListener("click", () => {
-    const step = d.steps.find(s => s.id === el.dataset.step);
+  `).join("");
+
+  list.querySelectorAll("[data-step]").forEach(el => el.addEventListener("click", () => {
+    const step = findStepById(el.dataset.step);
+    if (!step) return;
     if (step.status === "locked") return lmsToast("Selesaikan aktivitas sebelumnya untuk membuka ini.", true);
     openStep(step);
   }));
 }
 
+// Muat ulang data jalur belajar tanpa menutup panel detail yang sedang dibuka
+// (dipakai setelah materi ditandai "dilihat", tugas dikumpulkan, dsb.)
+async function refreshBabListSilently() {
+  try {
+    pathData = await LMS_API.call("getStudentPath", {});
+    renderBabList(pathData);
+  } catch (err) { /* biarkan panel detail tetap tampil meski refresh gagal */ }
+}
+
+async function loadPath() {
+  document.getElementById("path-body").innerHTML = "";
+  try {
+    pathData = await LMS_API.call("getStudentPath", {});
+    renderBabList(pathData);
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
+
 function openStep(step) {
   if (step.jenis === "kuis") return loadQuiz(step.id);
+  if (step.jenis === "tugas") return loadTugas(step);
+  if (step.jenis === "forum") return loadForum(step);
+  return loadMateri(step); // materi, tautan luar, atau tipe lain dibaca sebagai halaman materi
+}
+
+// ---------- Halaman Materi / Tautan (auto tandai "Dilihat" di server) ----------
+async function loadMateri(step) {
+  const body = document.getElementById("path-body");
+  body.innerHTML = `<div class="card"><div class="skeleton" style="height:160px"></div></div>`;
+  try {
+    const data = await LMS_API.call("getMateri", { activityId: step.id });
+    body.innerHTML = `
+      <div class="card">
+        <h2 class="text-headline-sm">${data.judul}</h2>
+        <div class="text-body-md" style="margin:12px 0;line-height:1.6">${data.konten || "<p style='color:var(--text-soft)'>Belum ada konten materi.</p>"}</div>
+        ${data.lampiranUrl ? `<a class="btn" href="${data.lampiranUrl}" target="_blank" rel="noopener" style="margin-bottom:10px">📎 Buka Lampiran (PDF/PPT)</a><br>` : ""}
+        <div id="link-list" style="display:flex;flex-direction:column;gap:8px;margin:8px 0"></div>
+        <button class="btn primary" style="margin-top:10px" id="mark-done">Tandai Selesai</button>
+      </div>
+    `;
+    document.getElementById("link-list").innerHTML = (data.links || []).map(l => `
+      <a class="btn" href="${l.url}" target="_blank" rel="noopener">${l.jenis === 'video' ? '▶' : '🔗'} ${l.judul}</a>
+    `).join("");
+    document.getElementById("mark-done").addEventListener("click", async () => {
+      try {
+        await LMS_API.call("markActivityDone", { activityId: step.id });
+        lmsToast("Materi ditandai selesai.");
+        await refreshBabListSilently();
+      } catch (err) { lmsToast(err.message, true); }
+    });
+    // getMateri sudah menandai status "dilihat" di server — segarkan daftar bab
+    // supaya aktivitas berikutnya otomatis terbuka (gembok hilang) tanpa reload halaman.
+    await refreshBabListSilently();
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
+
+// ---------- Pengumpulan Tugas (upload berkas) ----------
+function loadTugas(step) {
   const body = document.getElementById("path-body");
   body.innerHTML = `
     <div class="card">
       <h2 class="text-headline-sm">${step.judul}</h2>
-      <p class="text-body-sm text-muted" style="margin:8px 0 16px">${step.deskripsi || "Materi pembelajaran."}</p>
-      <div id="link-list" style="display:flex;flex-direction:column;gap:8px"></div>
-      <button class="btn primary" style="margin-top:16px" id="mark-done">Tandai Selesai</button>
+      <p class="text-body-sm text-muted" style="margin:8px 0 16px">Unggah berkas tugas Anda dalam bentuk PDF atau gambar.</p>
+      <div class="form-field"><label>Berkas Tugas</label><input type="file" id="tugas-file" accept=".pdf,image/*"></div>
+      <div class="form-field"><label>Catatan untuk guru (opsional)</label><textarea id="tugas-catatan" rows="2"></textarea></div>
+      <button class="btn primary" id="btn-submit-tugas">Kumpulkan Tugas</button>
+      <div id="tugas-status" class="text-body-sm text-muted" style="margin-top:10px">${step.status === "done" ? "Status: sudah dinilai." : ""}</div>
     </div>
   `;
-  document.getElementById("link-list").innerHTML = (step.links || []).map(l => `
-    <a class="btn" href="${l.url}" target="_blank" rel="noopener">${l.jenis === 'video' ? '▶' : '🔗'} ${l.judul}</a>
-  `).join("") || `<div class="text-body-sm text-muted">Tidak ada tautan tambahan untuk aktivitas ini.</div>`;
-  document.getElementById("mark-done").addEventListener("click", async () => {
-    try {
-      await LMS_API.call("markActivityDone", { activityId: step.id });
-      lmsToast("Aktivitas ditandai selesai.");
-      await loadPath();
-    } catch (err) { lmsToast(err.message, true); }
+  document.getElementById("btn-submit-tugas").addEventListener("click", () => {
+    const fileInput = document.getElementById("tugas-file");
+    if (!fileInput.files[0]) return lmsToast("Pilih berkas terlebih dahulu.", true);
+    const file = fileInput.files[0];
+    const btn = document.getElementById("btn-submit-tugas");
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result.split(",")[1];
+      btn.disabled = true; btn.textContent = "Mengunggah…";
+      try {
+        await LMS_API.call("submitAssignment", {
+          activityId: step.id, fileBase64: base64, fileName: file.name, mimeType: file.type,
+          catatan: document.getElementById("tugas-catatan").value
+        });
+        lmsToast("Tugas berhasil dikumpulkan.");
+        document.getElementById("tugas-status").textContent = "Status: Submitted — menunggu penilaian guru.";
+        await refreshBabListSilently();
+      } catch (err) {
+        lmsToast(err.message, true);
+      } finally {
+        btn.disabled = false; btn.textContent = "Kumpulkan Tugas";
+      }
+    };
+    reader.readAsDataURL(file);
   });
 }
 
-// ---------- Quiz ----------
+// ---------- Forum Diskusi per Aktivitas ----------
+async function loadForum(step) {
+  const body = document.getElementById("path-body");
+  body.innerHTML = `<div class="card"><div class="skeleton" style="height:160px"></div></div>`;
+  try {
+    const posts = await LMS_API.call("getForumPosts", { aktivitasId: step.id });
+    body.innerHTML = `
+      <div class="card">
+        <h2 class="text-headline-sm">${step.judul}</h2>
+        <div id="forum-posts" style="display:flex;flex-direction:column;gap:10px;margin:12px 0"></div>
+        <div class="form-field"><label>Tulis pertanyaan/komentar</label><textarea id="forum-isi" rows="2"></textarea></div>
+        <button class="btn primary" id="btn-forum-post">Kirim</button>
+      </div>
+    `;
+    document.getElementById("forum-posts").innerHTML = posts.map(p => `
+      <div class="card tight"><b>${p.userNama}</b> <span class="text-muted text-body-sm">(${p.userRole})</span><div style="margin-top:4px">${p.isi}</div></div>
+    `).join("") || `<div class="empty">Belum ada diskusi. Jadilah yang pertama bertanya!</div>`;
+    document.getElementById("btn-forum-post").addEventListener("click", async () => {
+      const isi = document.getElementById("forum-isi").value.trim();
+      if (!isi) return;
+      try { await LMS_API.call("addForumPost", { aktivitasId: step.id, isi }); await loadForum(step); }
+      catch (err) { lmsToast(err.message, true); }
+    });
+  } catch (err) { lmsToast(err.message, true); }
+}
+
+// ---------- Kuis ----------
 let quizState = null;
 
 async function loadQuiz(activityId) {
@@ -114,6 +320,7 @@ async function loadQuiz(activityId) {
 function renderQuiz() {
   const q = quizState;
   const soal = q.soal[q.current];
+  const percobaanInfo = q.attemptsMax ? `${q.attemptsUsed}/${q.attemptsMax} percobaan` : "percobaan tidak terbatas";
   const body = document.getElementById("path-body");
   body.innerHTML = `
     <div class="grid" style="grid-template-columns:2fr 1fr;gap:16px;align-items:start">
@@ -121,7 +328,7 @@ function renderQuiz() {
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
           <div>
             <div class="text-headline-sm">Soal No. ${q.current + 1} dari ${q.soal.length}</div>
-            <div class="text-body-sm text-muted">${q.judul}</div>
+            <div class="text-body-sm text-muted">${q.judul} · ${percobaanInfo}</div>
           </div>
           <span class="chip warn">⏱ ${q.durasiMenit} menit</span>
         </div>
@@ -172,6 +379,7 @@ function renderQuiz() {
             <button class="btn primary" style="margin-top:16px" id="back-to-path">Kembali ke Jalur Belajar</button>
           </div>`;
         document.getElementById("back-to-path").addEventListener("click", loadPath);
+        await refreshBabListSilently();
       } catch (err) { lmsToast(err.message, true); }
     } else {
       quizState.current++; renderQuiz();
@@ -179,15 +387,6 @@ function renderQuiz() {
   });
 }
 
-async function loadPath() {
-  document.getElementById("path-body").innerHTML = "";
-  try {
-    pathData = await LMS_API.call("getStudentPath", {});
-    renderHeader(pathData);
-  } catch (err) {
-    lmsToast(err.message, true);
-  }
-}
 loadPath();
 </script>
 </body>

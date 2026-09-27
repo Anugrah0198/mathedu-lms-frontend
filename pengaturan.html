@@ -6,29 +6,96 @@
 <title>Pengaturan</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/tokens.css">
+<style>
+  .badge-tile{border:1px solid var(--border);border-radius:var(--r-md);padding:14px;text-align:center}
+  .info-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+</style>
 </head>
 <body>
 <script src="assets/js/config.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/shell.js"></script>
-<script>const user = LMS_AUTH.requireRole(null);</script>
+<script>const user = LMS_AUTH.requireRole(["superadmin", "guru", "siswa"]);</script>
+
 <div id="root"></div>
+
 <script>
-const root = lmsRenderShell({ activeId: "pengaturan", title: "Pengaturan" });
+const titleMap = { superadmin: "Pengaturan Sekolah", guru: "Pengaturan", siswa: "Pengaturan" };
+const root = lmsRenderShell({ activeId: "pengaturan", title: titleMap[user.role] });
+
+const roleLabel = { guru: "Guru Matematika", siswa: "Siswa", superadmin: "Administrator Sekolah" }[user.role] || user.role;
+
 root.innerHTML = `
-  <div class="breadcrumb"><b>Pengaturan</b></div>
-  <div class="page-head"><div class="title"><h1 class="text-headline-lg">Pengaturan Akun</h1>
-  <p>Kelola profil dan preferensi tampilan.</p></div></div>
-  <div class="card" style="max-width:480px">
-    <div class="form-field"><label>Nama</label><input value="${user.name}" disabled></div>
-    <div class="form-field"><label>Peran</label><input value="${user.role}" disabled></div>
-    <button class="btn" id="toggle-theme">Ganti Tema Terang/Gelap</button>
+  <div class="breadcrumb">Akun &nbsp;›&nbsp; <b>${titleMap[user.role]}</b></div>
+  <div class="page-head">
+    <div class="title">
+      <h1 class="text-headline-lg">${titleMap[user.role]}</h1>
+      <p>Informasi akun Anda saat ini.</p>
+    </div>
+  </div>
+
+  <div class="grid" style="grid-template-columns:1fr 1.2fr;gap:16px;align-items:start">
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div class="avatar-sm" style="width:56px;height:56px;font-size:20px">${lmsInitials(user.name)}</div>
+        <div>
+          <div class="text-headline-sm">${user.name}</div>
+          <div class="text-body-sm text-muted">${roleLabel}${user.kelas ? " · " + user.kelas : ""}</div>
+        </div>
+      </div>
+      <div class="info-row"><span class="text-body-sm text-muted">Email</span><span>${user.email}</span></div>
+      <div class="info-row" id="nis-row" style="display:none"><span class="text-body-sm text-muted">NIS</span><span id="nis-val"></span></div>
+      <div class="info-row"><span class="text-body-sm text-muted">Peran</span><span>${roleLabel}</span></div>
+      <div class="info-row" style="border-bottom:none"><span class="text-body-sm text-muted">Kelas / Bagian</span><span>${user.kelas || "—"}</span></div>
+    </div>
+
+    <div id="side-panel"></div>
+  </div>
+
+  <div class="card" style="margin-top:16px; background:var(--surface-low); border-style:dashed">
+    <p class="text-body-sm text-muted">
+      <b>Catatan:</b> Perubahan nama, email, atau reset kata sandi akun Anda hanya dapat dilakukan oleh Superadmin
+      melalui menu Kelola Pengguna. Hubungi administrator sekolah bila memerlukan perubahan.
+    </p>
   </div>
 `;
-document.getElementById("toggle-theme").addEventListener("click", () => {
-  const cur = document.documentElement.getAttribute("data-theme");
-  document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
-});
+
+if (user.role === "siswa") {
+  document.getElementById("side-panel").innerHTML = `
+    <div class="card">
+      <h2 class="text-headline-sm" style="margin-bottom:10px">Capaian Akademik</h2>
+      <div class="grid grid-2" id="profile-stats" style="margin-bottom:16px"></div>
+      <h3 class="text-label-lg" style="margin-bottom:10px">Lencana Pencapaian</h3>
+      <div class="grid grid-4" id="badge-list"></div>
+    </div>
+  `;
+  loadProfile();
+} else {
+  document.getElementById("side-panel").innerHTML = `
+    <div class="card">
+      <h2 class="text-headline-sm" style="margin-bottom:10px">Preferensi Tampilan</h2>
+      <p class="text-body-sm text-muted">Preferensi notifikasi dan tema tampilan akan tersedia pada pembaruan mendatang.</p>
+    </div>
+  `;
+}
+
+async function loadProfile() {
+  document.getElementById("profile-stats").innerHTML = Array(2).fill('<div class="card skeleton" style="height:70px"></div>').join("");
+  try {
+    const p = await LMS_API.call("getProfile", {});
+    document.getElementById("nis-row").style.display = "flex";
+    document.getElementById("nis-val").textContent = p.nis;
+    document.getElementById("profile-stats").innerHTML = `
+      <div class="card stat-tile"><div class="top"><div><div class="text-metric">${p.rataRata}</div><div class="label">Rata-rata Nilai</div></div><div class="ic mint">📈</div></div></div>
+      <div class="card stat-tile"><div class="top"><div><div class="text-metric">#${p.peringkatKelas}</div><div class="label">Peringkat di Kelas</div></div><div class="ic mint">🏆</div></div></div>
+    `;
+    document.getElementById("badge-list").innerHTML = p.badges.map(b => `
+      <div class="badge-tile"><div style="font-size:22px">🏅</div><div class="text-body-sm" style="margin-top:6px">${b.judul}</div></div>
+    `).join("") || `<div class="empty">Belum ada lencana yang diraih.</div>`;
+  } catch (err) {
+    lmsToast(err.message, true);
+  }
+}
 </script>
 </body>
 </html>
